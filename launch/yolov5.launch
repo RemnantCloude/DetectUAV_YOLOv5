@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<launch>
+    <node name="yolov5_node" pkg="yolov5" type="yolov5_node" output="screen">
+        <param name="weights" value="/home/cloude/ROS_catkin/src/yolov5/yolov5s_old.pt" />
+        <param name="imgsz" value="640" />
+        <param name="conf_thres" value="0.25" /> <!-- confidence threshold -->
+        <param name="iou_thres" value="0.45" /> <!-- NMS IOU threshold -->
+        <param name="max_det" value="1000" /> <!-- maximum detections per image -->
+        <param name="device" value="0" /> <!-- cuda device, i.e. 0 or 0,1,2,3 or cpu -->
+        <param name="local_camera" value="True" /> <!-- 本地笔记本电脑摄像头-->
+        <param name="view_img" value="True" />
+        <param name="agnostic_nms" value="False" />
+        <param name="augment" value="False" />
+        <param name="line_thickness" value="3" /> <!-- bounding box thickness (pixels) -->
+        <param name="half" value="False" /> <!-- use FP16 half-precision inference -->
+        <param name="camera_field_angle_pitch" value="60" />
+        <param name="camera_field_angle_yaw" value="80" />
+        <param name="uav_size_x" value="0.4" />
+        <param name="uav_size_y" value="0.2" />
+    </node>
+</launch>

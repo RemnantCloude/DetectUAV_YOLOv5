@@ -1,0 +1,195 @@
+#!/usr/bin/python
+#-*- coding:utf-8 -*-
+#
+#@author:Cloude Remnant
+#@date:2021-07-27
+#@description:
+#
+
+import rospy
+import numpy as np
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+import cv2
+import torch
+import math
+# import sys
+# from pathlib import Path
+# import torch.backends.cudnn as cudnn
+
+# FILE = Path(__file__).absolute()
+# sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
+
+from models.experimental import attempt_load
+from utils.general import check_img_size, non_max_suppression, \
+    scale_coords
+from utils.plots import colors, plot_one_box
+from utils.torch_utils import select_device
+from utils.augmentations import letterbox
+
+from yolov5.msg import uav_position
+
+
+class OPT():
+    def __init__(self):
+        self.weights = rospy.get_param("/yolov5_node/weights",
+                                       default='yolov5s_old.pt')
+        print(self.weights)
+        self.imgsz = rospy.get_param("/yolov5_node/imgsz", default=(960, 1280))
+        self.conf_thres = rospy.get_param(
+            "/yolov5_node/conf_thres",
+            default=0.25)  #'object confidence threshold'
+        self.iou_thres = rospy.get_param(
+            "/yolov5_node/iou_thres", default=0.45)  #'IOU threshold for NMS'
+        self.max_det = rospy.get_param(
+            "/yolov5_node/max_det",
+            default=1000)  #'maximum number of detections per image'
+        self.device = rospy.get_param("/yolov5_node/device", default='')
+        self.local_camera = rospy.get_param("/yolov5_node/local_camera",
+                                            default=False)
+        self.view_img = rospy.get_param("/yolov5_node/view_img", default=False)
+        self.classes = rospy.get_param("/yolov5_node/classes", default=None)
+        self.agnostic_nms = rospy.get_param(
+            "/yolov5_node/agnostic_nms", default=True)  #'class-agnostic NMS'
+        self.augment = rospy.get_param("/yolov5_node/augment",
+                                       default=True)  #'augmented inference'
+        self.line_thickness = rospy.get_param("/yolov5_node/line_thickness",
+                                              default=3)
+        self.half = rospy.get_param("/yolov5_node/half", default=False)
+        self.camera_field_angle_pitch = rospy.get_param(
+            "/yolov5_node/camera_field_angle_pitch", default=60)  # 相机俯仰角
+        self.camera_field_angle_yaw = rospy.get_param(
+            "/yolov5_node/camera_field_angle_yaw", default=80)  # 相机方位角
+        self.uav_size_x = rospy.get_param("yolov5_node/uav_size_x",
+                                          default="0")
+        self.uav_size_y = rospy.get_param("yolov5_node/uav_size_y",
+                                          default="0")
+
+
+def position_publish(opt, x, img_size, conf):
+    message = uav_position()
+    message.confidence = conf
+    message.img_h = img_size[0]
+    message.img_w = img_size[1]
+    # 根据无人机所占像素解算距离信息
+    message.distance_x = opt.uav_size_x / math.tan(opt.camera_field_angle_yaw *
+                                                   (x[2] - x[0]) /
+                                                   (2 * img_size[1]))
+    message.distance_y = opt.uav_size_y / math.tan(
+        opt.camera_field_angle_pitch * (x[3] - x[1]) / (2 * img_size[0]))
+    message.angle_pitch = opt.camera_field_angle_pitch / 2 - (
+        opt.camera_field_angle_pitch) * ((x[1] + x[3]) / 2 / img_size[0])
+    message.angle_yaw = opt.camera_field_angle_yaw / 2 - (
+        opt.camera_field_angle_yaw) * ((x[0] + x[2]) / 2 / img_size[1])
+    uav_position_pub.publish(message)
+
+
+def detect(opt, img):
+    im0 = img.copy()
+    img = letterbox(img, imgsz, stride)[0]
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+    img = np.ascontiguousarray(img)
+    img = torch.from_numpy(img).to(opt.device)
+    img = img.half() if opt.half else img.float()  # uint8 to fp16/32
+    img /= 255.0  # 0 - 255 to 0.0 - 1.0
+    if img.ndimension() == 3:
+        img = img.unsqueeze(0)
+
+    # Inference
+    pred = model(img, augment=opt.augment, visualize=False)[0]
+
+    # Apply NMS
+    pred = non_max_suppression(pred,
+                               opt.conf_thres,
+                               opt.iou_thres,
+                               opt.classes,
+                               opt.agnostic_nms,
+                               max_det=opt.max_det)
+
+    # Process detections
+    for i, det in enumerate(pred):  # detections per image
+        if len(det):
+            # Rescale boxes from img_size to im0 size
+            det[:, :4] = scale_coords(img.shape[2:], det[:, :4],
+                                      im0.shape).round()
+
+            for item in reversed(det):
+                xyxy = item[:4]
+                conf = item[-2]
+                cls = item[-1]
+
+                position_publish(opt,
+                                 xyxy.cpu().numpy().tolist(), im0.shape,
+                                 conf.item())
+
+                if opt.view_img:  # Add bbox to image
+                    c = int(cls)  # integer class
+                    label = 'drone {:.2f}'.format(conf)
+                    plot_one_box(xyxy,
+                                 im0,
+                                 label=label,
+                                 color=colors(c, True),
+                                 line_thickness=opt.line_thickness)
+
+        # Stream results
+        if opt.view_img:
+            cv2.imshow("UAV", im0)
+            key = cv2.waitKey(1)
+            if key & 0xFF == ord('q'):
+                print("shutdown")
+                rospy.on_shutdown()  # BUG
+                break
+
+
+def undistort(frame):
+    k1, k2, p1, p2, k3 = 0.0153402, -0.0100689, 0.00126162, 0.000279382, 0.0009102
+    # 相机坐标系到像素坐标系的转换矩阵
+    k = np.array([[336.830341, 0, 679.737809], [0, 336.885391, 488.825300],
+                  [0, 0, 1]])
+    # 畸变系数
+    d = np.array([k1, k2, p1, p2, k3])
+    h, w = frame.shape[:2]
+    mapx, mapy = cv2.initUndistortRectifyMap(k, d, None, k, (w, h), 5)
+    return cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
+
+
+# TEST
+def track_Callback(image_file):
+    image_file = bridge.imgmsg_to_cv2(image_file, "bgr8")
+    img = cv2.flip(undistort(image_file), -1)
+    detect(opt, img)
+
+
+if __name__ == '__main__':
+    opt = OPT()
+    # Initialize
+    device = select_device(opt.device)
+    opt.half &= device.type != 'cpu'  # half precision only supported on CUDA
+
+    # Load model
+    model = attempt_load(opt.weights, map_location=device)  # load FP32 model
+    stride = int(model.stride.max())  # model stride
+    imgsz = check_img_size(opt.imgsz, s=stride)  # check image size
+    if opt.half:
+        model.half()  # to FP16
+
+    # Run inference
+    if device.type != 'cpu':
+        model(
+            torch.zeros(1, 3, int(imgsz), int(imgsz)).to(device).type_as(
+                next(model.parameters())))  # run once
+
+    rospy.init_node('yolov5_node', anonymous=False)
+    uav_position_pub = rospy.Publisher("/yolov5/uav_position", uav_position)
+
+    if opt.local_camera == True:
+        cap = cv2.VideoCapture(0)
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if ret:
+                detect(opt, frame)
+    else:
+        bridge = CvBridge()
+        image_sub = rospy.Subscriber("/camera/image_color", Image,
+                                     track_Callback)
+        rospy.spin()

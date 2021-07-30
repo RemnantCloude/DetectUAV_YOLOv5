@@ -57,10 +57,10 @@ cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with Py
 #             return True
 
 
-def set_logging(rank=-1, verbose=True):
-    logging.basicConfig(
-        format="%(message)s",
-        level=logging.INFO if (verbose and rank in [-1, 0]) else logging.WARN)
+# def set_logging(rank=-1, verbose=True):
+#     logging.basicConfig(
+#         format="%(message)s",
+#         level=logging.INFO if (verbose and rank in [-1, 0]) else logging.WARN)
 
 
 # def init_seeds(seed=0):
