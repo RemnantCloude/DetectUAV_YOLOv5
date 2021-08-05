@@ -32,20 +32,36 @@ def DWConv(c1, c2, k=1, s=1, act=True):
     # Depthwise convolution
     return Conv(c1, c2, k, s, g=math.gcd(c1, c2), act=act)
 
+
 # TEST
 # class SiLU(nn.Module):
 #     @staticmethod
 #     def forward(x):
 #         return x * torch.sigmoid(x)
 
+
 class Conv(nn.Module):
     # Standard convolution
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):  # ch_in, ch_out, kernel, stride, padding, groups
+    def __init__(self,
+                 c1,
+                 c2,
+                 k=1,
+                 s=1,
+                 p=None,
+                 g=1,
+                 act=True):  # ch_in, ch_out, kernel, stride, padding, groups
         super().__init__()
-        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p), groups=g, bias=False)
+        self.conv = nn.Conv2d(c1,
+                              c2,
+                              k,
+                              s,
+                              autopad(k, p),
+                              groups=g,
+                              bias=False)
         self.bn = nn.BatchNorm2d(c2)
         # self.act = SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
-        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
+        self.act = nn.SiLU() if act is True else (
+            act if isinstance(act, nn.Module) else nn.Identity())
 
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
@@ -79,7 +95,8 @@ class TransformerBlock(nn.Module):
         if c1 != c2:
             self.conv = Conv(c1, c2)
         self.linear = nn.Linear(c2, c2)  # learnable position embedding
-        self.tr = nn.Sequential(*[TransformerLayer(c2, num_heads) for _ in range(num_layers)])
+        self.tr = nn.Sequential(
+            *[TransformerLayer(c2, num_heads) for _ in range(num_layers)])
         self.c2 = c2
 
     def forward(self, x):
@@ -87,12 +104,18 @@ class TransformerBlock(nn.Module):
             x = self.conv(x)
         b, _, w, h = x.shape
         p = x.flatten(2).unsqueeze(0).transpose(0, 3).squeeze(3)
-        return self.tr(p + self.linear(p)).unsqueeze(3).transpose(0, 3).reshape(b, self.c2, w, h)
+        return self.tr(p + self.linear(p)).unsqueeze(3).transpose(
+            0, 3).reshape(b, self.c2, w, h)
 
 
 class Bottleneck(nn.Module):
     # Standard bottleneck
-    def __init__(self, c1, c2, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, shortcut, groups, expansion
+    def __init__(self,
+                 c1,
+                 c2,
+                 shortcut=True,
+                 g=1,
+                 e=0.5):  # ch_in, ch_out, shortcut, groups, expansion
         super().__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
@@ -105,7 +128,13 @@ class Bottleneck(nn.Module):
 
 class BottleneckCSP(nn.Module):
     # CSP Bottleneck https://github.com/WongKinYiu/CrossStagePartialNetworks
-    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+    def __init__(self,
+                 c1,
+                 c2,
+                 n=1,
+                 shortcut=True,
+                 g=1,
+                 e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
         super().__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
@@ -114,7 +143,8 @@ class BottleneckCSP(nn.Module):
         self.cv4 = Conv(2 * c_, c2, 1, 1)
         self.bn = nn.BatchNorm2d(2 * c_)  # applied to cat(cv2, cv3)
         self.act = nn.LeakyReLU(0.1, inplace=True)
-        self.m = nn.Sequential(*[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)])
+        self.m = nn.Sequential(
+            *[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)])
 
     def forward(self, x):
         y1 = self.cv3(self.m(self.cv1(x)))
@@ -124,13 +154,20 @@ class BottleneckCSP(nn.Module):
 
 class C3(nn.Module):
     # CSP Bottleneck with 3 convolutions
-    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+    def __init__(self,
+                 c1,
+                 c2,
+                 n=1,
+                 shortcut=True,
+                 g=1,
+                 e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
         super().__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv(c1, c_, 1, 1)
         self.cv3 = Conv(2 * c_, c2, 1)  # act=FReLU(c2)
-        self.m = nn.Sequential(*[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)])
+        self.m = nn.Sequential(
+            *[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)])
         # self.m = nn.Sequential(*[CrossConv(c_, c_, 3, 1, g, 1.0, shortcut) for _ in range(n)])
 
     def forward(self, x):
@@ -160,7 +197,8 @@ class SPP(nn.Module):
         c_ = c1 // 2  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv(c_ * (len(k) + 1), c2, 1, 1)
-        self.m = nn.ModuleList([nn.MaxPool2d(kernel_size=x, stride=1, padding=x // 2) for x in k])
+        self.m = nn.ModuleList(
+            [nn.MaxPool2d(kernel_size=x, stride=1, padding=x // 2) for x in k])
 
     def forward(self, x):
         x = self.cv1(x)
@@ -169,13 +207,24 @@ class SPP(nn.Module):
 
 class Focus(nn.Module):
     # Focus wh information into c-space
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):  # ch_in, ch_out, kernel, stride, padding, groups
+    def __init__(self,
+                 c1,
+                 c2,
+                 k=1,
+                 s=1,
+                 p=None,
+                 g=1,
+                 act=True):  # ch_in, ch_out, kernel, stride, padding, groups
         super().__init__()
         self.conv = Conv(c1 * 4, c2, k, s, p, g, act)
         # self.contract = Contract(gain=2)
 
     def forward(self, x):  # x(b,c,w,h) -> y(b,4c,w/2,h/2)
-        return self.conv(torch.cat([x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2], x[..., 1::2, 1::2]], 1))
+        return self.conv(
+            torch.cat([
+                x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2],
+                x[..., 1::2, 1::2]
+            ], 1))
         # return self.conv(self.contract(x))
 
 
@@ -186,7 +235,8 @@ class Contract(nn.Module):
         self.gain = gain
 
     def forward(self, x):
-        N, C, H, W = x.size()  # assert (H / s == 0) and (W / s == 0), 'Indivisible gain'
+        N, C, H, W = x.size(
+        )  # assert (H / s == 0) and (W / s == 0), 'Indivisible gain'
         s = self.gain
         x = x.view(N, C, H // s, s, W // s, s)  # x(1,64,40,2,40,2)
         x = x.permute(0, 3, 5, 1, 2, 4).contiguous()  # x(1,2,2,64,40,40)
@@ -202,9 +252,9 @@ class Expand(nn.Module):
     def forward(self, x):
         N, C, H, W = x.size()  # assert C / s ** 2 == 0, 'Indivisible gain'
         s = self.gain
-        x = x.view(N, s, s, C // s ** 2, H, W)  # x(1,2,2,16,80,80)
+        x = x.view(N, s, s, C // s**2, H, W)  # x(1,2,2,16,80,80)
         x = x.permute(0, 3, 4, 1, 5, 2).contiguous()  # x(1,16,80,2,80,2)
-        return x.view(N, C // s ** 2, H * s, W * s)  # x(1,16,160,160)
+        return x.view(N, C // s**2, H * s, W * s)  # x(1,16,160,160)
 
 
 class Concat(nn.Module):
@@ -287,7 +337,6 @@ class Concat(nn.Module):
 
 #             t.append(time_sync())
 #             return Detections(imgs, y, files, t, self.names, x.shape)
-
 
 # class Detections:
 #     # YOLOv5 detections class for inference results
@@ -378,7 +427,6 @@ class Concat(nn.Module):
 
 #     def __len__(self):
 #         return self.n
-
 
 # class Classify(nn.Module):
 #     # Classification head, i.e. x(b,c1,20,20) to x(b,c2)

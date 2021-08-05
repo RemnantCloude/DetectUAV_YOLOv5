@@ -1,9 +1,9 @@
 # Plotting utils
 
-import glob
-import os
-from copy import copy
-from pathlib import Path
+# import glob
+# import os
+# from copy import copy
+# from pathlib import Path
 
 import cv2
 # import math
@@ -28,8 +28,10 @@ class Colors:
     # Ultralytics color palette https://ultralytics.com/
     def __init__(self):
         # hex = matplotlib.colors.TABLEAU_COLORS.values()
-        hex = ('FF3838', 'FF9D97', 'FF701F', 'FFB21D', 'CFD231', '48F90A', '92CC17', '3DDB86', '1A9334', '00D4BB',
-               '2C99A8', '00C2FF', '344593', '6473FF', '0018EC', '8438FF', '520085', 'CB38FF', 'FF95C8', 'FF37C7')
+        hex = ('FF3838', 'FF9D97', 'FF701F', 'FFB21D', 'CFD231', '48F90A',
+               '92CC17', '3DDB86', '1A9334', '00D4BB', '2C99A8', '00C2FF',
+               '344593', '6473FF', '0018EC', '8438FF', '520085', 'CB38FF',
+               'FF95C8', 'FF37C7')
         self.palette = [self.hex2rgb('#' + c) for c in hex]
         self.n = len(self.palette)
 
@@ -44,7 +46,6 @@ class Colors:
 
 colors = Colors()  # create instance for 'from utils.plots import colors'
 
-
 # def hist2d(x, y, n=100):
 #     # 2d histogram used in labels.png and evolve.png
 #     xedges, yedges = np.linspace(x.min(), x.max(), n), np.linspace(y.min(), y.max(), n)
@@ -52,7 +53,6 @@ colors = Colors()  # create instance for 'from utils.plots import colors'
 #     xidx = np.clip(np.digitize(x, xedges) - 1, 0, hist.shape[0] - 1)
 #     yidx = np.clip(np.digitize(y, yedges) - 1, 0, hist.shape[1] - 1)
 #     return np.log(hist[xidx, yidx])
-
 
 # def butter_lowpass_filtfilt(data, cutoff=1500, fs=50000, order=5):
 #     from scipy.signal import butter, filtfilt
@@ -70,7 +70,8 @@ colors = Colors()  # create instance for 'from utils.plots import colors'
 def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
     # Plots one bounding box on image 'im' using OpenCV
     # assert im.data.contiguous, 'Image not contiguous. Apply np.ascontiguousarray(im) to plot_on_box() input image.'
-    tl = line_thickness or round(0.002 * (im.shape[0] + im.shape[1]) / 2) + 1  # line/font thickness
+    tl = line_thickness or round(
+        0.002 * (im.shape[0] + im.shape[1]) / 2) + 1  # line/font thickness
     c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
     cv2.rectangle(im, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
     if label:
@@ -78,7 +79,12 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
         t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
         c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
         cv2.rectangle(im, c1, c2, color, -1, cv2.LINE_AA)  # filled
-        cv2.putText(im, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+        cv2.putText(im,
+                    label, (c1[0], c1[1] - 2),
+                    0,
+                    tl / 3, [225, 255, 255],
+                    thickness=tf,
+                    lineType=cv2.LINE_AA)
 
 
 # def plot_one_box_PIL(box, im, color=(128, 128, 128), label=None, line_thickness=None):
@@ -93,7 +99,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #         draw.rectangle([box[0], box[1] - txt_height + 4, box[0] + txt_width, box[1]], fill=color)
 #         draw.text((box[0], box[1] - txt_height + 1), label, fill=(255, 255, 255), font=font)
 #     return np.asarray(im)
-
 
 # def plot_wh_methods():  # from utils.plots import *; plot_wh_methods()
 #     # Compares the two methods for width-height anchor multiplication
@@ -114,7 +119,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #     plt.legend()
 #     fig.savefig('comparison.png', dpi=200)
 
-
 # def output_to_target(output):
 #     # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
 #     targets = []
@@ -122,7 +126,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #         for *box, conf, cls in o.cpu().numpy():
 #             targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf])
 #     return np.array(targets)
-
 
 # def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=640, max_subplots=16):
 #     # Plot image grid with labels
@@ -201,7 +204,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #         Image.fromarray(mosaic).save(fname)  # PIL save
 #     return mosaic
 
-
 # def plot_lr_scheduler(optimizer, scheduler, epochs=300, save_dir=''):
 #     # Plot LR simulating training for full epochs
 #     optimizer, scheduler = copy(optimizer), copy(scheduler)  # do not modify originals
@@ -217,7 +219,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #     plt.ylim(0)
 #     plt.savefig(Path(save_dir) / 'LR.png', dpi=200)
 #     plt.close()
-
 
 # def plot_val_txt():  # from utils.plots import *; plot_val()
 #     # Plot val.txt histograms
@@ -235,7 +236,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #     ax[1].hist(cy, bins=600)
 #     plt.savefig('hist1d.png', dpi=200)
 
-
 # def plot_targets_txt():  # from utils.plots import *; plot_targets_txt()
 #     # Plot targets.txt histograms
 #     x = np.loadtxt('targets.txt', dtype=np.float32).T
@@ -247,7 +247,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #         ax[i].legend()
 #         ax[i].set_title(s[i])
 #     plt.savefig('targets.jpg', dpi=200)
-
 
 # def plot_study_txt(path='', x=None):  # from utils.plots import *; plot_study_txt()
 #     # Plot study.txt generated by val.py
@@ -281,7 +280,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #     ax2.set_ylabel('COCO AP val')
 #     ax2.legend(loc='lower right')
 #     plt.savefig(str(Path(path).name) + '.png', dpi=300)
-
 
 # def plot_labels(labels, names=(), save_dir=Path(''), loggers=None):
 #     # plot dataset labels
@@ -331,7 +329,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #         if k == 'wandb' and v:
 #             v.log({"Labels": [v.Image(str(x), caption=x.name) for x in save_dir.glob('*labels*.jpg')]}, commit=False)
 
-
 # def plot_evolution(yaml_file='data/hyp.finetune.yaml'):  # from utils.plots import *; plot_evolution()
 #     # Plot hyperparameter evolution results in evolve.txt
 #     with open(yaml_file) as f:
@@ -354,7 +351,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #         print('%15s: %.3g' % (k, mu))
 #     plt.savefig('evolve.png', dpi=200)
 #     print('\nPlot saved as evolve.png')
-
 
 # def profile_idetection(start=0, stop=0, labels=(), save_dir=''):
 #     # Plot iDetection '*.txt' per-image logs. from utils.plots import *; profile_idetection()
@@ -387,7 +383,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #     ax[1].legend()
 #     plt.savefig(Path(save_dir) / 'idetection_profile.png', dpi=200)
 
-
 # def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_results_overlay()
 #     # Plot training 'results*.txt', overlaying train and val losses
 #     s = ['train', 'train', 'train', 'Precision', 'mAP@0.5', 'val', 'val', 'val', 'Recall', 'mAP@0.5:0.95']  # legends
@@ -409,7 +404,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 #             ax[i].legend()
 #             ax[i].set_ylabel(f) if i == 0 else None  # add filename
 #         fig.savefig(f.replace('.txt', '.png'), dpi=200)
-
 
 # def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
 #     # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
@@ -445,7 +439,6 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
 
 #     ax[1].legend()
 #     fig.savefig(Path(save_dir) / 'results.png', dpi=200)
-
 
 # def feature_visualization(x, module_type, stage, n=32, save_dir=Path('runs/detect/exp')):
 #     """

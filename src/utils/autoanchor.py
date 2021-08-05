@@ -1,11 +1,11 @@
 # Auto-anchor utils
 
-import random
+# import random
 
-import numpy as np
-import torch
-import yaml
-from tqdm import tqdm
+# import numpy as np
+# import torch
+# import yaml
+# from tqdm import tqdm
 
 # from utils.general import colorstr
 
@@ -58,7 +58,6 @@ def check_anchor_order(m):
 #         else:
 #             print(f'{prefix}Original anchors better than new anchors. Proceeding with original anchors.')
 #     print('')  # newline
-
 
 # def kmean_anchors(path='./data/coco128.yaml', n=9, img_size=640, thr=4.0, gen=1000, verbose=True):
 #     """ Creates kmeans-evolved anchors from training dataset

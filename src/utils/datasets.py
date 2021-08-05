@@ -1,26 +1,26 @@
 # YOLOv5 dataset utils and dataloaders
 
 import glob
-import hashlib
-import json
-import logging
+# import hashlib
+# import json
+# import logging
 import os
-import random
-import shutil
-import time
-from itertools import repeat
-from multiprocessing.pool import ThreadPool, Pool
+# import random
+# import shutil
+# import time
+# from itertools import repeat
+# from multiprocessing.pool import ThreadPool, Pool
 from pathlib import Path
-from threading import Thread
+# from threading import Thread
 
 import cv2
 import numpy as np
-import torch
-import torch.nn.functional as F
-import yaml
-from PIL import Image, ExifTags
-from torch.utils.data import Dataset
-from tqdm import tqdm
+# import torch
+# import torch.nn.functional as F
+# import yaml
+# from PIL import Image, ExifTags
+# from torch.utils.data import Dataset
+# from tqdm import tqdm
 
 from utils.augmentations import letterbox
 # from utils.augmentations import Albumentations, augment_hsv, copy_paste, letterbox, mixup, random_perspective
@@ -30,8 +30,11 @@ from utils.augmentations import letterbox
 
 # Parameters
 HELP_URL = 'https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data'
-IMG_FORMATS = ['bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dng', 'webp', 'mpo']  # acceptable image suffixes
-VID_FORMATS = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # acceptable video suffixes
+IMG_FORMATS = [
+    'bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dng', 'webp', 'mpo'
+]  # acceptable image suffixes
+VID_FORMATS = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv',
+               'mkv']  # acceptable video suffixes
 # NUM_THREADS = min(8, os.cpu_count())  # number of multiprocessing threads
 
 # Get orientation exif tag
@@ -39,14 +42,12 @@ VID_FORMATS = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # accep
 #     if ExifTags.TAGS[orientation] == 'Orientation':
 #         break
 
-
 # def get_hash(paths):
 #     # Returns a single hash value of a list of paths (files or dirs)
 #     size = sum(os.path.getsize(p) for p in paths if os.path.exists(p))  # sizes
 #     h = hashlib.md5(str(size).encode())  # hash sizes
 #     h.update(''.join(paths).encode())  # hash paths
 #     return h.hexdigest()  # return hash
-
 
 # def exif_size(img):
 #     # Returns exif-corrected PIL size
@@ -61,7 +62,6 @@ VID_FORMATS = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # accep
 #         pass
 
 #     return s
-
 
 # def exif_transpose(image):
 #     """
@@ -87,7 +87,6 @@ VID_FORMATS = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # accep
 #             del exif[0x0112]
 #             image.info["exif"] = exif.tobytes()
 #     return image
-
 
 # def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=None, augment=False, cache=False, pad=0.0,
 #                       rect=False, rank=-1, workers=8, image_weights=False, quad=False, prefix=''):
@@ -117,7 +116,6 @@ VID_FORMATS = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # accep
 #                         collate_fn=LoadImagesAndLabels.collate_fn4 if quad else LoadImagesAndLabels.collate_fn)
 #     return dataloader, dataset
 
-
 # class InfiniteDataLoader(torch.utils.data.dataloader.DataLoader):
 #     """ Dataloader that reuses workers
 
@@ -135,7 +133,6 @@ VID_FORMATS = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # accep
 #     def __iter__(self):
 #         for i in range(len(self)):
 #             yield next(self.iterator)
-
 
 # class _RepeatSampler(object):
 #     """ Sampler that repeats forever
@@ -275,7 +272,6 @@ class LoadImages:  # for inference
 #     def __len__(self):
 #         return 0
 
-
 # class LoadStreams:  # multiple IP or RTSP cameras
 #     def __init__(self, sources='streams.txt', img_size=640, stride=32):
 #         self.mode = 'stream'
@@ -356,12 +352,10 @@ class LoadImages:  # for inference
 #     def __len__(self):
 #         return len(self.sources)  # 1E12 frames = 32 streams at 30 FPS for 30 years
 
-
 # def img2label_paths(img_paths):
 #     # Define label paths as a function of image paths
 #     sa, sb = os.sep + 'images' + os.sep, os.sep + 'labels' + os.sep  # /images/, /labels/ substrings
 #     return [sb.join(x.rsplit(sa, 1)).rsplit('.', 1)[0] + '.txt' for x in img_paths]
-
 
 # class LoadImagesAndLabels(Dataset):  # for training/testing
 #     def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
@@ -620,7 +614,6 @@ class LoadImages:  # for inference
 
 #         return torch.stack(img4, 0), torch.cat(label4, 0), path4, shapes4
 
-
 # # Ancillary functions --------------------------------------------------------------------------------------------------
 # def load_image(self, index):
 #     # loads 1 image from dataset, returns img, original hw, resized hw
@@ -637,7 +630,6 @@ class LoadImages:  # for inference
 #         return img, (h0, w0), img.shape[:2]  # img, hw_original, hw_resized
 #     else:
 #         return self.imgs[index], self.img_hw0[index], self.img_hw[index]  # img, hw_original, hw_resized
-
 
 # def load_mosaic(self, index):
 #     # loads images in a 4-mosaic
@@ -694,7 +686,6 @@ class LoadImages:  # for inference
 #                                        border=self.mosaic_border)  # border to remove
 
 #     return img4, labels4
-
 
 # def load_mosaic9(self, index):
 #     # loads images in a 9-mosaic
@@ -769,13 +760,11 @@ class LoadImages:  # for inference
 
 #     return img9, labels9
 
-
 # def create_folder(path='./new'):
 #     # Create folder
 #     if os.path.exists(path):
 #         shutil.rmtree(path)  # delete output folder
 #     os.makedirs(path)  # make new output folder
-
 
 # def flatten_recursive(path='../datasets/coco128'):
 #     # Flatten a recursive directory by bringing all files to top level
@@ -783,7 +772,6 @@ class LoadImages:  # for inference
 #     create_folder(new_path)
 #     for file in tqdm(glob.glob(str(Path(path)) + '/**/*.*', recursive=True)):
 #         shutil.copyfile(file, new_path / Path(file).name)
-
 
 # def extract_boxes(path='../datasets/coco128'):  # from utils.datasets import *; extract_boxes()
 #     # Convert detection dataset into classification dataset, with one directory per class
@@ -818,7 +806,6 @@ class LoadImages:  # for inference
 #                     b[[1, 3]] = np.clip(b[[1, 3]], 0, h)
 #                     assert cv2.imwrite(str(f), im[b[1]:b[3], b[0]:b[2]]), f'box failure in {f}'
 
-
 # def autosplit(path='../datasets/coco128/images', weights=(0.9, 0.1, 0.0), annotated_only=False):
 #     """ Autosplit a dataset into train/val/test splits and save path/autosplit_*.txt files
 #     Usage: from utils.datasets import *; autosplit()
@@ -841,7 +828,6 @@ class LoadImages:  # for inference
 #         if not annotated_only or Path(img2label_paths([str(img)])[0]).exists():  # check label
 #             with open(path.parent / txt[i], 'a') as f:
 #                 f.write('./' + img.relative_to(path.parent).as_posix() + '\n')  # add image to txt file
-
 
 # def verify_image_label(args):
 #     # Verify one image-label pair
@@ -887,12 +873,11 @@ class LoadImages:  # for inference
 #         msg = f'{prefix}WARNING: Ignoring corrupted image and/or label {im_file}: {e}'
 #         return [None, None, None, None, nm, nf, ne, nc, msg]
 
-
 # def dataset_stats(path='coco128.yaml', autodownload=False, verbose=False):
 #     """ Return dataset statistics dictionary with images and instances counts per split per class
 #     Usage1: from utils.datasets import *; dataset_stats('coco128.yaml', verbose=True)
 #     Usage2: from utils.datasets import *; dataset_stats('../datasets/coco128.zip', verbose=True)
-    
+
 #     Arguments
 #         path:           Path to data.yaml or data.zip (with data.yaml inside data.zip)
 #         autodownload:   Attempt to download dataset if not found locally

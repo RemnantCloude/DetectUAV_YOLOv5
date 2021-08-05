@@ -1,19 +1,17 @@
 # Model validation metrics
 
-import warnings
-from pathlib import Path
+# import warnings
+# from pathlib import Path
 
-import math
-import matplotlib.pyplot as plt
-import numpy as np
+# import math
+# import matplotlib.pyplot as plt
+# import numpy as np
 import torch
-
 
 # def fitness(x):
 #     # Model fitness as a weighted combination of metrics
 #     w = [0.0, 0.0, 0.1, 0.9]  # weights for [P, R, mAP@0.5, mAP@0.5:0.95]
 #     return (x[:, :4] * w).sum(1)
-
 
 # def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names=()):
 #     """ Compute the average precision, given the recall and precision curves.
@@ -77,7 +75,6 @@ import torch
 #     i = f1.mean(0).argmax()  # max F1 index
 #     return p[:, i], r[:, i], ap, f1[:, i], unique_classes.astype('int32')
 
-
 # def compute_ap(recall, precision):
 #     """ Compute the average precision, given the recall and precision curves
 #     # Arguments
@@ -104,7 +101,6 @@ import torch
 #         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])  # area under curve
 
 #     return ap, mpre, mrec
-
 
 # class ConfusionMatrix:
 #     # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
@@ -182,7 +178,6 @@ import torch
 #         for i in range(self.nc + 1):
 #             print(' '.join(map(str, self.matrix[i])))
 
-
 # def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
 #     # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
 #     box2 = box2.T
@@ -240,7 +235,6 @@ def box_iou(box1, box2):
         iou (Tensor[N, M]): the NxM matrix containing the pairwise
             IoU values for every element in boxes1 and boxes2
     """
-
     def box_area(box):
         # box = 4xn
         return (box[2] - box[0]) * (box[3] - box[1])
@@ -249,8 +243,10 @@ def box_iou(box1, box2):
     area2 = box_area(box2.T)
 
     # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
-    inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) - torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
-    return inter / (area1[:, None] + area2 - inter)  # iou = inter / (area1 + area2 - inter)
+    inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) -
+             torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
+    return inter / (area1[:, None] + area2 - inter
+                    )  # iou = inter / (area1 + area2 - inter)
 
 
 # def bbox_ioa(box1, box2, eps=1E-7):
@@ -276,14 +272,12 @@ def box_iou(box1, box2):
 #     # Intersection over box2 area
 #     return inter_area / box2_area
 
-
 # def wh_iou(wh1, wh2):
 #     # Returns the nxm IoU matrix. wh1 is nx2, wh2 is mx2
 #     wh1 = wh1[:, None]  # [N,1,2]
 #     wh2 = wh2[None]  # [1,M,2]
 #     inter = torch.min(wh1, wh2).prod(2)  # [N,M]
 #     return inter / (wh1.prod(2) + wh2.prod(2) - inter)  # iou = inter / (area1 + area2 - inter)
-
 
 # Plots ----------------------------------------------------------------------------------------------------------------
 
@@ -305,7 +299,6 @@ def box_iou(box1, box2):
 #     ax.set_ylim(0, 1)
 #     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
 #     fig.savefig(Path(save_dir), dpi=250)
-
 
 # def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric'):
 #     # Metric-confidence curve

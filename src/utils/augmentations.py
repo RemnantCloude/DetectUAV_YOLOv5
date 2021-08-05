@@ -1,15 +1,14 @@
 # YOLOv5 image augmentation functions
 
-import logging
-import random
+# import logging
+# import random
 
 import cv2
-import math
+# import math
 import numpy as np
 
 # from utils.general import colorstr, segment2box, resample_segments, check_version
 # from utils.metrics import bbox_ioa
-
 
 # class Albumentations:
 #     # YOLOv5 Albumentations class (optional, only used if package is installed)
@@ -37,7 +36,6 @@ import numpy as np
 #             im, labels = new['image'], np.array([[c, *b] for c, b in zip(new['class_labels'], new['bboxes'])])
 #         return im, labels
 
-
 # def augment_hsv(im, hgain=0.5, sgain=0.5, vgain=0.5):
 #     # HSV color-space augmentation
 #     if hgain or sgain or vgain:
@@ -53,7 +51,6 @@ import numpy as np
 #         im_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val)))
 #         cv2.cvtColor(im_hsv, cv2.COLOR_HSV2BGR, dst=im)  # no return needed
 
-
 # def hist_equalize(im, clahe=True, bgr=False):
 #     # Equalize histogram on BGR image 'im' with im.shape(n,m,3) and range 0-255
 #     yuv = cv2.cvtColor(im, cv2.COLOR_BGR2YUV if bgr else cv2.COLOR_RGB2YUV)
@@ -63,7 +60,6 @@ import numpy as np
 #     else:
 #         yuv[:, :, 0] = cv2.equalizeHist(yuv[:, :, 0])  # equalize Y channel histogram
 #     return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR if bgr else cv2.COLOR_YUV2RGB)  # convert YUV image to RGB
-
 
 # def replicate(im, labels):
 #     # Replicate labels
@@ -82,7 +78,13 @@ import numpy as np
 #     return im, labels
 
 
-def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
+def letterbox(im,
+              new_shape=(640, 640),
+              color=(114, 114, 114),
+              auto=True,
+              scaleFill=False,
+              scaleup=True,
+              stride=32):
     # Resize and pad image while meeting stride-multiple constraints
     shape = im.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int) or isinstance(new_shape, float):
@@ -96,13 +98,15 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
     # Compute padding
     ratio = r, r  # width, height ratios
     new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
+    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[
+        1]  # wh padding
     if auto:  # minimum rectangle
         dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
     elif scaleFill:  # stretch
         dw, dh = 0.0, 0.0
         new_unpad = (new_shape[1], new_shape[0])
-        ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]  # width, height ratios
+        ratio = new_shape[1] / shape[1], new_shape[0] / shape[
+            0]  # width, height ratios
 
     dw /= 2  # divide padding into 2 sides
     dh /= 2
@@ -111,7 +115,13 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
         im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+    im = cv2.copyMakeBorder(im,
+                            top,
+                            bottom,
+                            left,
+                            right,
+                            cv2.BORDER_CONSTANT,
+                            value=color)  # add border
     return im, ratio, (dw, dh)
 
 
@@ -203,7 +213,6 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
 
 #     return im, targets
 
-
 # def copy_paste(im, labels, segments, p=0.5):
 #     # Implement Copy-Paste augmentation https://arxiv.org/abs/2012.07177, labels as nx5 np.array(cls, xyxy)
 #     n = len(segments)
@@ -226,7 +235,6 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
 #         im[i] = result[i]  # cv2.imwrite('debug.jpg', im)  # debug
 
 #     return im, labels, segments
-
 
 # def cutout(im, labels, p=0.5):
 #     # Applies image cutout augmentation https://arxiv.org/abs/1708.04552
@@ -254,14 +262,12 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
 
 #     return labels
 
-
 # def mixup(im, labels, im2, labels2):
 #     # Applies MixUp augmentation https://arxiv.org/pdf/1710.09412.pdf
 #     r = np.random.beta(32.0, 32.0)  # mixup ratio, alpha=beta=32.0
 #     im = (im * r + im2 * (1 - r)).astype(np.uint8)
 #     labels = np.concatenate((labels, labels2), 0)
 #     return im, labels
-
 
 # def box_candidates(box1, box2, wh_thr=2, ar_thr=20, area_thr=0.1, eps=1e-16):  # box1(4,n), box2(4,n)
 #     # Compute candidate boxes: box1 before augment, box2 after augment, wh_thr (pixels), aspect_ratio_thr, area_ratio

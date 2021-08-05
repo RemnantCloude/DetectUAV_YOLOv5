@@ -24,7 +24,7 @@ from models.experimental import attempt_load
 from utils.general import check_img_size, non_max_suppression, \
     scale_coords
 from utils.plots import colors, plot_one_box
-from utils.torch_utils import select_device
+from utils.torch_utils import select_device, time_sync
 from utils.augmentations import letterbox
 
 from yolov5.msg import uav_position
@@ -35,7 +35,7 @@ class OPT():
         self.weights = rospy.get_param("/yolov5_node/weights",
                                        default='yolov5s_old.pt')
         print(self.weights)
-        self.imgsz = rospy.get_param("/yolov5_node/imgsz", default=(960, 1280))
+        self.imgsz = rospy.get_param("/yolov5_node/imgsz", default=640)
         self.conf_thres = rospy.get_param(
             "/yolov5_node/conf_thres",
             default=0.25)  #'object confidence threshold'
@@ -64,6 +64,8 @@ class OPT():
                                           default="0")
         self.uav_size_y = rospy.get_param("yolov5_node/uav_size_y",
                                           default="0")
+        self.debug = rospy.get_param("yolov5_node/debug", default=False)
+        self.save_img = rospy.get_param("yolov5_node/save_img", default=False)
 
 
 def position_publish(opt, x, img_size, conf):
@@ -85,6 +87,22 @@ def position_publish(opt, x, img_size, conf):
 
 
 def detect(opt, img):
+    if opt.debug == True:
+        t1 = time_sync()
+
+    if opt.save_img == True:
+        import os
+        global last_time
+        global cout
+        if rospy.get_time() - last_time > 1:
+            last_time = rospy.get_time()
+            name = "{}.jpg".format(str(cout).rjust(6, "0"))
+            if not os.path.exists("/home/cloude/图片/camera_img/"):
+                os.mkdir("/home/cloude/图片/camera_img/")
+            cv2.imwrite("/home/cloude/图片/camera_img/" + name, img)
+            print("img-{} saved!".format(cout))
+            cout = cout + 1
+
     im0 = img.copy()
     img = letterbox(img, imgsz, stride)[0]
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
@@ -113,23 +131,28 @@ def detect(opt, img):
             det[:, :4] = scale_coords(img.shape[2:], det[:, :4],
                                       im0.shape).round()
 
-            for item in reversed(det):
-                xyxy = item[:4]
-                conf = item[-2]
-                cls = item[-1]
+            max_conf = 0
+            for item in reversed(det):  # 找到置信度最大的物体
+                if item[-2] > max_conf:
+                    max_conf_item = item
+                    max_conf = max_conf_item[-2]
 
-                position_publish(opt,
-                                 xyxy.cpu().numpy().tolist(), im0.shape,
-                                 conf.item())
+            xyxy = max_conf_item[:4]
+            conf = max_conf_item[-2]
+            cls = max_conf_item[-1]
 
-                if opt.view_img:  # Add bbox to image
-                    c = int(cls)  # integer class
-                    label = 'drone {:.2f}'.format(conf)
-                    plot_one_box(xyxy,
-                                 im0,
-                                 label=label,
-                                 color=colors(c, True),
-                                 line_thickness=opt.line_thickness)
+            position_publish(opt,
+                             xyxy.cpu().numpy().tolist(), im0.shape,
+                             conf.item())
+
+            if opt.view_img:  # Add bbox to image
+                c = int(cls)  # integer class
+                label = 'drone {:.2f}'.format(conf)
+                plot_one_box(xyxy,
+                             im0,
+                             label=label,
+                             color=colors(c, True),
+                             line_thickness=opt.line_thickness)
 
         # Stream results
         if opt.view_img:
@@ -140,12 +163,15 @@ def detect(opt, img):
                 rospy.on_shutdown()  # BUG
                 break
 
+    if opt.debug == True:
+        t2 = time_sync()
+        rospy.loginfo("Detect time: %f", (t2 - t1))
+
 
 def undistort(frame):
-    k1, k2, p1, p2, k3 = 0.0153402, -0.0100689, 0.00126162, 0.000279382, 0.0009102
+    k1, k2, p1, p2, k3 = 0.0072, -0.0051, 0, 0, 0
     # 相机坐标系到像素坐标系的转换矩阵
-    k = np.array([[336.830341, 0, 679.737809], [0, 336.885391, 488.825300],
-                  [0, 0, 1]])
+    k = np.array([[341.7448, 0, 679.4348], [0, 340.6764, 485.0365], [0, 0, 1]])
     # 畸变系数
     d = np.array([k1, k2, p1, p2, k3])
     h, w = frame.shape[:2]
@@ -153,7 +179,6 @@ def undistort(frame):
     return cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
 
 
-# TEST
 def track_Callback(image_file):
     image_file = bridge.imgmsg_to_cv2(image_file, "bgr8")
     img = cv2.flip(undistort(image_file), -1)
@@ -182,6 +207,10 @@ if __name__ == '__main__':
     rospy.init_node('yolov5_node', anonymous=False)
     uav_position_pub = rospy.Publisher("/yolov5/uav_position", uav_position)
 
+    if opt.save_img == True:
+        last_time = rospy.get_time()
+        cout = 0
+
     if opt.local_camera == True:
         cap = cv2.VideoCapture(0)
         while cap.isOpened():
@@ -192,4 +221,6 @@ if __name__ == '__main__':
         bridge = CvBridge()
         image_sub = rospy.Subscriber("/camera/image_color", Image,
                                      track_Callback)
+        # image_sub = rospy.Subscriber("/camera/image_raw", Image,
+        #                              track_Callback)
         rospy.spin()

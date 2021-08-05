@@ -1,28 +1,28 @@
 # YOLOv5 general utils
 
-import contextlib
-import glob
-import logging
+# import contextlib
+# import glob
+# import logging
 import os
-import platform
-import random
-import re
-import signal
+# import platform
+# import random
+# import re
+# import signal
 import time
-import urllib
-from itertools import repeat
-from multiprocessing.pool import ThreadPool
-from pathlib import Path
-from subprocess import check_output
+# import urllib
+# from itertools import repeat
+# from multiprocessing.pool import ThreadPool
+# from pathlib import Path
+# from subprocess import check_output
 
 import cv2
 import math
 import numpy as np
 import pandas as pd
-import pkg_resources as pkg
+# import pkg_resources as pkg
 import torch
 import torchvision
-import yaml
+# import yaml
 
 # from utils.google_utils import gsutil_getsize
 from utils.metrics import box_iou
@@ -31,11 +31,14 @@ from utils.metrics import box_iou
 
 # Settings
 torch.set_printoptions(linewidth=320, precision=5, profile='long')
-np.set_printoptions(linewidth=320, formatter={'float_kind': '{:11.5g}'.format})  # format short g, %precision=5
+np.set_printoptions(linewidth=320,
+                    formatter={'float_kind': '{:11.5g}'.format
+                               })  # format short g, %precision=5
 pd.options.display.max_columns = 10
-cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with PyTorch DataLoader)
+cv2.setNumThreads(
+    0
+)  # prevent OpenCV from multithreading (incompatible with PyTorch DataLoader)
 # os.environ['NUMEXPR_MAX_THREADS'] = str(min(os.cpu_count(), 8))  # NumExpr max threads
-
 
 # class timeout(contextlib.ContextDecorator):
 #     # Usage: @timeout(seconds) decorator or 'with timeout(seconds):' context manager
@@ -56,12 +59,10 @@ cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with Py
 #         if self.suppress and exc_type is TimeoutError:  # Suppress TimeoutError
 #             return True
 
-
 # def set_logging(rank=-1, verbose=True):
 #     logging.basicConfig(
 #         format="%(message)s",
 #         level=logging.INFO if (verbose and rank in [-1, 0]) else logging.WARN)
-
 
 # def init_seeds(seed=0):
 #     # Initialize random number generator (RNG) seeds
@@ -69,17 +70,14 @@ cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with Py
 #     np.random.seed(seed)
 #     init_torch_seeds(seed)
 
-
 # def get_latest_run(search_dir='.'):
 #     # Return path to most recent 'last.pt' in /runs (i.e. to --resume from)
 #     last_list = glob.glob(f'{search_dir}/**/last*.pt', recursive=True)
 #     return max(last_list, key=os.path.getctime) if last_list else ''
 
-
 # def is_docker():
 #     # Is environment a Docker container?
 #     return Path('/workspace').exists()  # or Path('/.dockerenv').exists()
-
 
 # def is_colab():
 #     # Is environment a Google Colab instance?
@@ -89,21 +87,17 @@ cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with Py
 #     except Exception as e:
 #         return False
 
-
 # def is_pip():
 #     # Is file in a pip package?
 #     return 'site-packages' in Path(__file__).absolute().parts
-
 
 # def emojis(str=''):
 #     # Return platform-dependent emoji-safe version of string
 #     return str.encode().decode('ascii', 'ignore') if platform.system() == 'Windows' else str
 
-
 # def file_size(file):
 #     # Return file size in MB
 #     return Path(file).stat().st_size / 1e6
-
 
 # def check_online():
 #     # Check internet connectivity
@@ -113,7 +107,6 @@ cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with Py
 #         return True
 #     except OSError:
 #         return False
-
 
 # def check_git_status(err_msg=', for updates see https://github.com/ultralytics/yolov5'):
 #     # Recommend 'git pull' if code is out of date
@@ -136,18 +129,15 @@ cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with Py
 #     except Exception as e:
 #         print(f'{e}{err_msg}')
 
-
 # def check_python(minimum='3.6.2'):
 #     # Check current python version vs. required python version
 #     check_version(platform.python_version(), minimum, name='Python ')
-
 
 # def check_version(current='0.0.0', minimum='0.0.0', name='version ', pinned=False):
 #     # Check version vs. required version
 #     current, minimum = (pkg.parse_version(x) for x in (current, minimum))
 #     result = (current == minimum) if pinned else (current >= minimum)
 #     assert result, f'{name}{minimum} required by YOLOv5, but {name}{current} is currently installed'
-
 
 # def check_requirements(requirements='requirements.txt', exclude=()):
 #     # Check installed dependencies meet requirements (pass *.txt file or list of packages)
@@ -204,7 +194,6 @@ def check_img_size(img_size, s=32, floor=0):
 #         print(f'WARNING: Environment does not support cv2.imshow() or PIL Image.show() image displays\n{e}')
 #         return False
 
-
 # def check_file(file):
 #     # Search/download file (if necessary) and return path
 #     file = str(file)  # convert to str()
@@ -222,7 +211,6 @@ def check_img_size(img_size, s=32, floor=0):
 #         assert len(files), f'File not found: {file}'  # assert file was found
 #         assert len(files) == 1, f"Multiple files match '{file}', specify exact path: {files}"  # assert unique
 #         return files[0]  # return file
-
 
 # def check_dataset(data, autodownload=True):
 #     # Download dataset if not found locally
@@ -256,7 +244,6 @@ def check_img_size(img_size, s=32, floor=0):
 #                 print('Dataset autodownload %s\n' % ('success' if r in (0, None) else 'failure'))  # print result
 #             else:
 #                 raise Exception('Dataset not found.')
-
 
 # def download(url, dir='.', unzip=True, delete=True, curl=False, threads=1):
 #     # Multi-threaded file download and unzip function
@@ -300,11 +287,9 @@ def make_divisible(x, divisor):
 #     # Cleans a string by replacing special characters with underscore _
 #     return re.sub(pattern="[]", repl="_", string=s)
 
-
 # def one_cycle(y1=0.0, y2=1.0, steps=100):
 #     # lambda function for sinusoidal ramp from y1 to y2
 #     return lambda x: ((1 - math.cos(x * math.pi / steps)) / 2) * (y2 - y1) + y1
-
 
 # def colorstr(*input):
 #     # Colors a string https://en.wikipedia.org/wiki/ANSI_escape_code, i.e.  colorstr('blue', 'hello world')
@@ -330,7 +315,6 @@ def make_divisible(x, divisor):
 #               'underline': '\033[4m'}
 #     return ''.join(colors[x] for x in args) + f'{string}' + colors['end']
 
-
 # def labels_to_class_weights(labels, nc=80):
 #     # Get class weights (inverse frequency) from training labels
 #     if labels[0] is None:  # no labels loaded
@@ -349,14 +333,12 @@ def make_divisible(x, divisor):
 #     weights /= weights.sum()  # normalize
 #     return torch.from_numpy(weights)
 
-
 # def labels_to_image_weights(labels, nc=80, class_weights=np.ones(80)):
 #     # Produces image weights based on class_weights and image contents
 #     class_counts = np.array([np.bincount(x[:, 0].astype(np.int), minlength=nc) for x in labels])
 #     image_weights = (class_weights.reshape(1, nc) * class_counts).sum(1)
 #     # index = random.choices(range(n), weights=image_weights, k=1)  # weight image sample
 #     return image_weights
-
 
 # def coco80_to_coco91_class():  # converts 80-index (val2014) to 91-index (paper)
 #     # https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/
@@ -427,7 +409,6 @@ def xyn2xy(x, w=640, h=640, padw=0, padh=0):
 #     x, y, = x[inside], y[inside]
 #     return np.array([x.min(), y.min(), x.max(), y.max()]) if any(x) else np.zeros((1, 4))  # xyxy
 
-
 # def segments2boxes(segments):
 #     # Convert segment labels to box labels, i.e. (cls, xy1, xy2, ...) to (cls, xywh)
 #     boxes = []
@@ -435,7 +416,6 @@ def xyn2xy(x, w=640, h=640, padw=0, padh=0):
 #         x, y = s.T  # segment xy
 #         boxes.append([x.min(), y.min(), x.max(), y.max()])  # cls, xyxy
 #     return xyxy2xywh(np.array(boxes))  # cls, xywh
-
 
 # def resample_segments(segments, n=1000):
 #     # Up-sample an (n,2) segment
@@ -449,9 +429,12 @@ def xyn2xy(x, w=640, h=640, padw=0, padh=0):
 def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
     # Rescale coords (xyxy) from img1_shape to img0_shape
     if ratio_pad is None:  # calculate from img0_shape
-        gain = min(float(img1_shape[0]) / float(img0_shape[0]), float(img1_shape[1]) / float(img0_shape[1]))  # gain  = old / new
+        gain = min(
+            float(img1_shape[0]) / float(img0_shape[0]),
+            float(img1_shape[1]) / float(img0_shape[1]))  # gain  = old / new
         # gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
-        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (
+            img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
     else:
         gain = ratio_pad[0][0]
         pad = ratio_pad[1]
@@ -475,8 +458,14 @@ def clip_coords(boxes, shape):
         boxes[:, [1, 3]] = boxes[:, [1, 3]].clip(0, shape[0])  # y1, y2
 
 
-def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False,
-                        labels=(), max_det=300):
+def non_max_suppression(prediction,
+                        conf_thres=0.25,
+                        iou_thres=0.45,
+                        classes=None,
+                        agnostic=False,
+                        multi_label=False,
+                        labels=(),
+                        max_det=300):
     """Runs Non-Maximum Suppression (NMS) on inference results
 
     Returns:
@@ -499,7 +488,8 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     merge = False  # use merge-NMS
 
     t = time.time()
-    output = [torch.zeros((0, 6), device=prediction.device)] * prediction.shape[0]
+    output = [torch.zeros(
+        (0, 6), device=prediction.device)] * prediction.shape[0]
     for xi, x in enumerate(prediction):  # image index, image inference
         # Apply constraints
         # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
@@ -530,7 +520,8 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
             x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float()), 1)
         else:  # best class only
             conf, j = x[:, 5:].max(1, keepdim=True)
-            x = torch.cat((box, conf, j.float()), 1)[conf.view(-1) > conf_thres]
+            x = torch.cat((box, conf, j.float()),
+                          1)[conf.view(-1) > conf_thres]
 
         # Filter by class
         if classes is not None:
@@ -545,19 +536,23 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
         if not n:  # no boxes
             continue
         elif n > max_nms:  # excess boxes
-            x = x[x[:, 4].argsort(descending=True)[:max_nms]]  # sort by confidence
+            x = x[x[:, 4].argsort(
+                descending=True)[:max_nms]]  # sort by confidence
 
         # Batched NMS
         c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
-        boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
+        boxes, scores = x[:, :4] + c, x[:,
+                                        4]  # boxes (offset by class), scores
         i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
         if i.shape[0] > max_det:  # limit detections
             i = i[:max_det]
-        if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
+        if merge and (1 < n <
+                      3E3):  # Merge NMS (boxes merged using weighted mean)
             # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
             iou = box_iou(boxes[i], boxes) > iou_thres  # iou matrix
             weights = iou * scores[None]  # box weights
-            x[i, :4] = torch.mm(weights, x[:, :4]).float() / weights.sum(1, keepdim=True)  # merged boxes
+            x[i, :4] = torch.mm(weights, x[:, :4]).float() / weights.sum(
+                1, keepdim=True)  # merged boxes
             if redundant:
                 i = i[iou.sum(1) > 1]  # require redundancy
 
@@ -569,7 +564,8 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     return output
 
 
-def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_optimizer()
+def strip_optimizer(f='best.pt',
+                    s=''):  # from utils.general import *; strip_optimizer()
     # Strip optimizer from 'f' to finalize training, optionally save as 's'
     # x = torch.load(f, map_location=torch.device('cpu'))
     x = torch.load(f, map_location=torch.device('cuda'))
@@ -584,7 +580,8 @@ def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_op
     torch.save(x, s or f)
     mb = os.path.getsize(s or f) / 1E6  # filesize
     # print(f"Optimizer stripped from {f},{(' saved as %s,' % s) if s else ''} {mb:.1f}MB")
-    print("Optimizer stripped from {s}, saved as {s}, {:.1f}MB".format(f, s, mb))
+    print("Optimizer stripped from {s}, saved as {s}, {:.1f}MB".format(
+        f, s, mb))
 
 
 # def print_mutation(hyp, results, yaml_file='hyp_evolved.yaml', bucket=''):
@@ -616,7 +613,6 @@ def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_op
 
 #     if bucket:
 #         os.system('gsutil cp evolve.txt %s gs://%s' % (yaml_file, bucket))  # upload
-
 
 # def apply_classifier(x, model, img, im0):
 #     # Apply a second stage classifier to yolo outputs
@@ -652,7 +648,6 @@ def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_op
 
 #     return x
 
-
 # def save_one_box(xyxy, im, file='image.jpg', gain=1.02, pad=10, square=False, BGR=False, save=True):
 #     # Save image crop as {file} with crop size multiple {gain} and {pad} pixels. Save and/or return crop
 #     xyxy = torch.tensor(xyxy).view(-1, 4)
@@ -666,7 +661,6 @@ def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_op
 #     if save:
 #         cv2.imwrite(str(increment_path(file, mkdir=True).with_suffix('.jpg')), crop)
 #     return crop
-
 
 # def increment_path(path, exist_ok=False, sep='', mkdir=False):
 #     # Increment file or directory path, i.e. runs/exp --> runs/exp{sep}2, runs/exp{sep}3, ... etc.

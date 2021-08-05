@@ -45,7 +45,13 @@ class CrossConv(nn.Module):
 
 class GhostConv(nn.Module):
     # Ghost Convolution https://github.com/huawei-noah/ghostnet
-    def __init__(self, c1, c2, k=1, s=1, g=1, act=True):  # ch_in, ch_out, kernel, stride, groups
+    def __init__(self,
+                 c1,
+                 c2,
+                 k=1,
+                 s=1,
+                 g=1,
+                 act=True):  # ch_in, ch_out, kernel, stride, groups
         super().__init__()
         c_ = c2 // 2  # hidden channels
         self.cv1 = Conv(c1, c_, k, s, None, g, act)
@@ -61,11 +67,13 @@ class GhostBottleneck(nn.Module):
     def __init__(self, c1, c2, k=3, s=1):  # ch_in, ch_out, kernel, stride
         super().__init__()
         c_ = c2 // 2
-        self.conv = nn.Sequential(GhostConv(c1, c_, 1, 1),  # pw
-                                  DWConv(c_, c_, k, s, act=False) if s == 2 else nn.Identity(),  # dw
-                                  GhostConv(c_, c2, 1, 1, act=False))  # pw-linear
-        self.shortcut = nn.Sequential(DWConv(c1, c1, k, s, act=False),
-                                      Conv(c1, c2, 1, 1, act=False)) if s == 2 else nn.Identity()
+        self.conv = nn.Sequential(
+            GhostConv(c1, c_, 1, 1),  # pw
+            DWConv(c_, c_, k, s, act=False) if s == 2 else nn.Identity(),  # dw
+            GhostConv(c_, c2, 1, 1, act=False))  # pw-linear
+        self.shortcut = nn.Sequential(DWConv(
+            c1, c1, k, s, act=False), Conv(
+                c1, c2, 1, 1, act=False)) if s == 2 else nn.Identity()
 
     def forward(self, x):
         return self.conv(x) + self.shortcut(x)
@@ -78,16 +86,21 @@ class MixConv2d(nn.Module):
         groups = len(k)
         if equal_ch:  # equal c_ per group
             i = torch.linspace(0, groups - 1E-6, c2).floor()  # c2 indices
-            c_ = [(i == g).sum() for g in range(groups)]  # intermediate channels
+            c_ = [(i == g).sum()
+                  for g in range(groups)]  # intermediate channels
         else:  # equal weight.numel() per group
             b = [c2] + [0] * groups
             a = np.eye(groups + 1, groups, k=-1)
             a -= np.roll(a, 1, axis=1)
-            a *= np.array(k) ** 2
+            a *= np.array(k)**2
             a[0] = 1
-            c_ = np.linalg.lstsq(a, b, rcond=None)[0].round()  # solve for equal weight indices, ax = b
+            c_ = np.linalg.lstsq(a, b, rcond=None)[0].round(
+            )  # solve for equal weight indices, ax = b
 
-        self.m = nn.ModuleList([nn.Conv2d(c1, int(c_[g]), k[g], s, k[g] // 2, bias=False) for g in range(groups)])
+        self.m = nn.ModuleList([
+            nn.Conv2d(c1, int(c_[g]), k[g], s, k[g] // 2, bias=False)
+            for g in range(groups)
+        ])
         self.bn = nn.BatchNorm2d(c2)
         self.act = nn.LeakyReLU(0.1, inplace=True)
 
@@ -112,15 +125,16 @@ class Ensemble(nn.ModuleList):
 
 def attempt_load(weights, map_location=None, inplace=True):
     # from models.yolo import Detect, Model
-    from pathlib import Path
+    #from pathlib import Path
 
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     model = Ensemble()
-    for w in weights if isinstance(weights, list) else [weights]:
-        file = Path(str(w).strip().replace("'", ''))
-        ckpt = torch.load(str(file), map_location=map_location)
-        # ckpt = torch.load(attempt_download(w), map_location=map_location)  # load
-        model.append(ckpt['ema' if ckpt.get('ema') else 'model'].float().fuse().eval())  # FP32 model
+    #for w in weights if isinstance(weights, list) else [weights]:
+    #file = Path(str(w).strip().replace("'", ''))
+    ckpt = torch.load(str(weights), map_location=map_location)
+    # ckpt = torch.load(attempt_download(w), map_location=map_location)  # load
+    model.append(ckpt['ema' if ckpt.get('ema') else 'model'].float().fuse().
+                 eval())  # FP32 model
 
     # Compatibility updates
     # for m in model.modules():
@@ -135,5 +149,7 @@ def attempt_load(weights, map_location=None, inplace=True):
         # print(f'Ensemble created with {weights}\n')
         for k in ['names']:
             setattr(model, k, getattr(model[-1], k))
-        model.stride = model[torch.argmax(torch.tensor([m.stride.max() for m in model])).int()].stride  # max stride
+        model.stride = model[torch.argmax(
+            torch.tensor([m.stride.max()
+                          for m in model])).int()].stride  # max stride
         return model  # return ensemble
