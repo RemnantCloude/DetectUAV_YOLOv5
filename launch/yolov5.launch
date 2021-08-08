@@ -1,24 +1,40 @@
+<!-- author:Cloude Remnant -->
+
 <?xml version="1.0"?>
 <launch>
-    <node name="yolov5_node" pkg="yolov5" type="yolov5_node" output="screen">
-        <param name="weights" value="/home/cloude/ugv_camera/src/yolov5/yolov5s_old.pt" />
+    <node pkg="yolov5" type="yolov5_node" name="yolov5_node" output="screen">
+        <param name="yolov5_weights" value="../yolov5s_old.pt" />
+        <param name="siamRPN_weights" value="../SiamRPNVOT.model" />
+
+        <!-- yolov5 param-->
         <param name="imgsz" value="640" />
-        <param name="conf_thres" value="0.2" /> <!-- confidence threshold -->
+        <param name="conf_thres" value="0.3" /> <!-- confidence threshold -->
         <param name="iou_thres" value="0.45" /> <!-- NMS IOU threshold -->
         <param name="max_det" value="1000" /> <!-- maximum detections per image -->
         <param name="device" value="0" /> <!-- cuda device, i.e. 0 or 0,1,2,3 or cpu -->
-        <param name="local_camera" value="False" /> <!-- 本地笔记本电脑摄像头-->
-        <param name="view_img" value="True" />
         <param name="agnostic_nms" value="False" />
         <param name="augment" value="False" />
         <param name="line_thickness" value="3" /> <!-- bounding box thickness (pixels) -->
-        <param name="half" value="False" /> <!-- use FP16 half-precision inference 在win环境测试发现是否开启意义不大，linux环境有bug-->
+        <param name="half" value="False" /> <!-- use FP16 half-precision inference 在win环境测试发现计算加速幅度较小，linux环境有bug-->
+
+        <!-- siamRPN param-->
+        <param name="siamRPN_conf_thres" value="0.8" />
+        <param name="diff_times" value="5" /> <!-- frames-->
+
         <param name="camera_field_angle_pitch" value="60" />
         <param name="camera_field_angle_yaw" value="80" />
         <param name="uav_size_x" value="0.4" />
         <param name="uav_size_y" value="0.2" />
-        <param name="debug" value="True" />
+
+        <param name="img_source" value="2" />
+        <!-- 0: external camera 1:local camera 2:local image dir-->
+        <param name="local_img_path" value="/home/cloude/camera_img1/*.jpg" />
+        <param name="img_frequency" value="3" /> <!-- Hz, read local image-->
+        <param name="debug" value="False" />
+        <param name="view_img" value="True" />
         <param name="save_img" value="False" />
+        <param name="save_img_path" value="/home/cloude/camera_img" />
+        <param name="track" value="True" />
     </node>
 
     <!-- Determine this using rosrun pointgrey_camera_driver list_cameras.
@@ -42,6 +58,6 @@
             <!--<param name="camera_info_url" if="$(arg calibrated)"
              value="file://$(env HOME)/.ros/camera_info/$(arg camera_serial).yaml" />-->
         </node>
-        <node pkg="nodelet" type="nodelet" name="image_proc_debayer" args="load image_proc/debayer camera_nodelet_manager"></node>
+        <node pkg="nodelet" type="nodelet" name="image_proc_debayer" args="load image_proc/debayer camera_nodelet_manager" />
     </group>
 </launch>

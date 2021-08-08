@@ -13,28 +13,35 @@ from cv_bridge import CvBridge
 import cv2
 import torch
 import math
-# import sys
-# from pathlib import Path
-# import torch.backends.cudnn as cudnn
-
-# FILE = Path(__file__).absolute()
-# sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
+import os
+from os.path import realpath, dirname, join
+import glob
 
 from models.experimental import attempt_load
-from utils.general import check_img_size, non_max_suppression, \
-    scale_coords
+from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.plots import colors, plot_one_box
 from utils.torch_utils import select_device, time_sync
 from utils.augmentations import letterbox
+from siamRPN.net import SiamRPNvot
+from siamRPN.run_SiamRPN import SiamRPN_init, SiamRPN_track
 
 from yolov5.msg import uav_position
+
+target = {
+    "siamRPN_init": False,
+    "yolov5_detect": False,
+    "yolov5_xyxy": [],
+    "diff_times": 0
+}
 
 
 class OPT():
     def __init__(self):
-        self.weights = rospy.get_param("/yolov5_node/weights",
-                                       default='yolov5s_old.pt')
-        print(self.weights)
+        self.yolov5_weights = rospy.get_param("/yolov5_node/yolov5_weights",
+                                              default="../yolov5s_old.pt")
+        self.siamRPN_weights = rospy.get_param("/yolov5_node/siamRPN_weights",
+                                               default="../SiamRPNVOT.model")
+
         self.imgsz = rospy.get_param("/yolov5_node/imgsz", default=640)
         self.conf_thres = rospy.get_param(
             "/yolov5_node/conf_thres",
@@ -45,9 +52,6 @@ class OPT():
             "/yolov5_node/max_det",
             default=1000)  #'maximum number of detections per image'
         self.device = rospy.get_param("/yolov5_node/device", default='')
-        self.local_camera = rospy.get_param("/yolov5_node/local_camera",
-                                            default=False)
-        self.view_img = rospy.get_param("/yolov5_node/view_img", default=False)
         self.classes = rospy.get_param("/yolov5_node/classes", default=None)
         self.agnostic_nms = rospy.get_param(
             "/yolov5_node/agnostic_nms", default=True)  #'class-agnostic NMS'
@@ -56,19 +60,93 @@ class OPT():
         self.line_thickness = rospy.get_param("/yolov5_node/line_thickness",
                                               default=3)
         self.half = rospy.get_param("/yolov5_node/half", default=False)
+
+        self.siamRPN_conf_thres = rospy.get_param(
+            "/yolov5_node/siamRPN_conf_thres", default=0.7)
+        self.diff_times = rospy.get_param("/yolov5_node/diff_times", default=5)
+
         self.camera_field_angle_pitch = rospy.get_param(
             "/yolov5_node/camera_field_angle_pitch", default=60)  # 相机俯仰角
         self.camera_field_angle_yaw = rospy.get_param(
             "/yolov5_node/camera_field_angle_yaw", default=80)  # 相机方位角
-        self.uav_size_x = rospy.get_param("yolov5_node/uav_size_x",
+        self.uav_size_x = rospy.get_param("/yolov5_node/uav_size_x",
                                           default="0")
-        self.uav_size_y = rospy.get_param("yolov5_node/uav_size_y",
+        self.uav_size_y = rospy.get_param("/yolov5_node/uav_size_y",
                                           default="0")
-        self.debug = rospy.get_param("yolov5_node/debug", default=False)
-        self.save_img = rospy.get_param("yolov5_node/save_img", default=False)
+
+        self.img_source = rospy.get_param("/yolov5_node/img_source", default=0)
+        self.local_img_path = rospy.get_param("/yolov5_node/local_img_path",
+                                              default="")
+        self.img_frequency = rospy.get_param("/yolov5_node/img_frequency",
+                                             default=5)
+        self.debug = rospy.get_param("/yolov5_node/debug", default=False)
+        self.view_img = rospy.get_param("/yolov5_node/view_img", default=False)
+        self.save_img = rospy.get_param("/yolov5_node/save_img", default=False)
+        self.save_img_path = rospy.get_param("/yolov5_node/save_img_path",
+                                             default="")
+        self.track = rospy.get_param("/yolov5_node/track", default=False)
 
 
-def position_publish(opt, x, img_size, conf):
+class image():
+    def __init__(self):
+        k1, k2, p1, p2, k3 = 0.0072, -0.0051, 0, 0, 0
+        # 相机坐标系到像素坐标系的转换矩阵
+        self.k = np.array([[341.7448, 0, 679.4348], [0, 340.6764, 485.0365],
+                           [0, 0, 1]])
+        # 畸变系数
+        self.d = np.array([k1, k2, p1, p2, k3])
+        self.save_img_lasttime = time_sync()
+        self.save_img_interval = 1  #second
+        self.save_img_cout = 0
+        self.save_img_path = opt.save_img_path
+        self.bridge = CvBridge()
+
+    def undistort(self, frame):
+        h, w = frame.shape[:2]
+        mapx, mapy = cv2.initUndistortRectifyMap(self.k, self.d, None, self.k,
+                                                 (w, h), 5)
+        return cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
+
+    def convert_img(self, frame):
+        frame = self.bridge.imgmsg_to_cv2(frame, "bgr8")
+        img = cv2.flip(self.undistort(frame), -1)
+        return img
+
+    def save_img(self, frame):
+        if time_sync() - self.save_img_lasttime > self.save_img_interval:
+            self.save_img_lasttime = time_sync()
+            name = "{}.jpg".format(str(self.save_img_cout).rjust(6, "0"))
+            if not os.path.exists(self.save_img_path):
+                os.mkdir(self.save_img_path)
+            cv2.imwrite(self.save_img_path + name, frame)
+            rospy.loginfo("img-{} saved".format(self.save_img_cout))
+            self.save_img_cout = self.save_img_cout + 1
+
+
+def iou(box1, box2):
+    """
+    box1, box2 = [x1,y1,x2,y2] - top-left, bottom-right
+    Returns: 
+        float from 0 to 1
+    """
+    area_box1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area_box2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+
+    iou_x1 = np.maximum(box1[0], box2[0])
+    iou_y1 = np.maximum(box1[1], box2[1])
+    iou_x2 = np.minimum(box1[2], box2[2])
+    iou_y2 = np.minimum(box1[3], box2[3])
+
+    area_iou = (iou_x2 - iou_x1) * (iou_y2 - iou_y1)
+    iou = area_iou / (area_box1 + area_box2 - area_iou)
+
+    return iou
+
+
+def position_publish(x, img_size, conf):
+    global opt
+    global uav_position_pub
+
     message = uav_position()
     message.confidence = conf
     message.img_h = img_size[0]
@@ -86,22 +164,12 @@ def position_publish(opt, x, img_size, conf):
     uav_position_pub.publish(message)
 
 
-def detect(opt, img):
+def detect(img):
+    global opt
+    global target
+
     if opt.debug == True:
         t1 = time_sync()
-
-    if opt.save_img == True:
-        import os
-        global last_time
-        global cout
-        if rospy.get_time() - last_time > 1:
-            last_time = rospy.get_time()
-            name = "{}.jpg".format(str(cout).rjust(6, "0"))
-            if not os.path.exists("/home/cloude/图片/camera_img/"):
-                os.mkdir("/home/cloude/图片/camera_img/")
-            cv2.imwrite("/home/cloude/图片/camera_img/" + name, img)
-            print("img-{} saved!".format(cout))
-            cout = cout + 1
 
     im0 = img.copy()
     img = letterbox(img, imgsz, stride)[0]
@@ -125,14 +193,14 @@ def detect(opt, img):
                                max_det=opt.max_det)
 
     # Process detections
-    for i, det in enumerate(pred):  # detections per image
+    for det in pred:  # detections per image
         if len(det):
             # Rescale boxes from img_size to im0 size
             det[:, :4] = scale_coords(img.shape[2:], det[:, :4],
                                       im0.shape).round()
 
             max_conf = 0
-            for item in reversed(det):  # 找到置信度最大的物体
+            for item in det:  # 找到置信度最大的物体
                 if item[-2] > max_conf:
                     max_conf_item = item
                     max_conf = max_conf_item[-2]
@@ -141,9 +209,12 @@ def detect(opt, img):
             conf = max_conf_item[-2]
             cls = max_conf_item[-1]
 
-            position_publish(opt,
-                             xyxy.cpu().numpy().tolist(), im0.shape,
+            position_publish(xyxy.cpu().numpy().tolist(), im0.shape,
                              conf.item())
+
+            if opt.track == True:
+                target["yolov5_detect"] = True
+                target["yolov5_xyxy"] = xyxy.cpu().numpy()
 
             if opt.view_img:  # Add bbox to image
                 c = int(cls)  # integer class
@@ -153,74 +224,154 @@ def detect(opt, img):
                              label=label,
                              color=colors(c, True),
                              line_thickness=opt.line_thickness)
+        elif opt.track == True:
+            target["yolov5_detect"] = False
+            target["diff_times"] = 0  # TODO
 
-        # Stream results
-        if opt.view_img:
-            cv2.imshow("UAV", im0)
-            key = cv2.waitKey(1)
-            if key & 0xFF == ord('q'):
-                print("shutdown")
-                rospy.on_shutdown()  # BUG
-                break
+    # Stream results
+    if opt.view_img:
+        cv2.imshow("detect", im0)
+        key = cv2.waitKey(1)
+        if key & 0xFF == ord('q'):
+            rospy.on_shutdown()  # BUG
 
     if opt.debug == True:
         t2 = time_sync()
         rospy.loginfo("Detect time: %f", (t2 - t1))
 
 
-def undistort(frame):
-    k1, k2, p1, p2, k3 = 0.0072, -0.0051, 0, 0, 0
-    # 相机坐标系到像素坐标系的转换矩阵
-    k = np.array([[341.7448, 0, 679.4348], [0, 340.6764, 485.0365], [0, 0, 1]])
-    # 畸变系数
-    d = np.array([k1, k2, p1, p2, k3])
-    h, w = frame.shape[:2]
-    mapx, mapy = cv2.initUndistortRectifyMap(k, d, None, k, (w, h), 5)
-    return cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
+def track(img):
+    def xyxy2xywh(x):
+        xy = np.array([int((x[0] + x[2]) / 2), int((x[1] + x[3]) / 2)])
+        wh = np.array([int(x[2] - x[0]), int(x[3] - x[1])])
+        return xy, wh
+
+    def xywh2xyxy(xy, wh):
+        x1 = int(xy[0] - wh[0] / 2)
+        y1 = int(xy[1] - wh[1] / 2)
+        x2 = int(xy[0] + wh[0] / 2)
+        y2 = int(xy[1] + wh[1] / 2)
+        return [x1, y1, x2, y2]
+
+    global opt
+    global state
+    global siam_net
+    global target
+
+    if opt.debug == True:
+        t1 = time_sync()
+
+    im0 = img.copy()
+    xyxy = [0, 0, 0, 0]
+
+    print("target", target)  # TEST
+
+    # first time
+    if target["siamRPN_init"] == False and target["yolov5_detect"] == True:
+        target_pos, target_sz = xyxy2xywh(target["yolov5_xyxy"])
+        state = SiamRPN_init(im0, target_pos, target_sz, siam_net)
+        target["siamRPN_init"] = True
+    # tracking
+    if target["siamRPN_init"] == True:
+        state = SiamRPN_track(state, im0)
+        xyxy = xywh2xyxy(state["target_pos"], state["target_sz"])
+        if opt.view_img == True:
+            cv2.rectangle(im0, (xyxy[0], xyxy[1]), (xyxy[2], xyxy[3]),
+                          (0, 255, 255), 3)
+    # compare with yolov5
+    if target["siamRPN_init"] == True and target["yolov5_detect"] == True:
+        if iou(target["yolov5_xyxy"],
+               xyxy) < opt.siamRPN_conf_thres:  # track the wrong target
+            target["diff_times"] = target["diff_times"] + 1
+    else:
+        pass
+        # position_publish()
+    # target loss, init net again
+    if target["diff_times"] > opt.diff_times:
+        target["diff_times"] = 0
+        target["siamRPN_init"] = False
+
+    if opt.view_img == True:
+        cv2.imshow("track", im0)
+        key = cv2.waitKey(1)
+        if key & 0xFF == ord('q'):
+            rospy.on_shutdown()  # BUG
+
+    if opt.debug == True:
+        t2 = time_sync()
+        rospy.loginfo("Track time: %f", (t2 - t1))
 
 
 def track_Callback(image_file):
-    image_file = bridge.imgmsg_to_cv2(image_file, "bgr8")
-    img = cv2.flip(undistort(image_file), -1)
-    detect(opt, img)
+    global my_image
+    global opt
+
+    if opt.img_source == 0:
+        image_file = my_image.convert_img(image_file)
+
+    if opt.save_img == True:
+        my_image.save_img(image_file)
+
+    detect(image_file)
+
+    if opt.track == True:
+        track(image_file)
 
 
 if __name__ == '__main__':
     opt = OPT()
+    my_image = image()
+
+    rospy.init_node('yolov5_node', anonymous=False)
+    uav_position_pub = rospy.Publisher("/yolov5/uav_position",
+                                       uav_position,
+                                       queue_size=1)
+
+    ## load yolov5 model
     # Initialize
     device = select_device(opt.device)
     opt.half &= device.type != 'cpu'  # half precision only supported on CUDA
-
     # Load model
-    model = attempt_load(opt.weights, map_location=device)  # load FP32 model
+    model = attempt_load(join(realpath(dirname(__file__)), opt.yolov5_weights),
+                         map_location=device)  # load FP32 model
+    rospy.loginfo("yolov5 Network successfully loaded")
     stride = int(model.stride.max())  # model stride
     imgsz = check_img_size(opt.imgsz, s=stride)  # check image size
-    if opt.half:
+    if opt.half == True:
         model.half()  # to FP16
-
     # Run inference
     if device.type != 'cpu':
         model(
             torch.zeros(1, 3, int(imgsz), int(imgsz)).to(device).type_as(
                 next(model.parameters())))  # run once
+    ## end
 
-    rospy.init_node('yolov5_node', anonymous=False)
-    uav_position_pub = rospy.Publisher("/yolov5/uav_position", uav_position)
+    if opt.track == True:
+        # load net
+        siam_net = SiamRPNvot()
+        siam_net.load_state_dict(
+            torch.load(join(realpath(dirname(__file__)), opt.siamRPN_weights)))
+        rospy.loginfo("SiamRPNVOT Network successfully loaded")
+        siam_net.eval().cuda()
+        state = dict()
 
-    if opt.save_img == True:
-        last_time = rospy.get_time()
-        cout = 0
-
-    if opt.local_camera == True:
-        cap = cv2.VideoCapture(0)
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if ret:
-                detect(opt, frame)
-    else:
-        bridge = CvBridge()
+    # 0: external camera 1:local camera 2:local image dir
+    if opt.img_source == 0:
         image_sub = rospy.Subscriber("/camera/image_color", Image,
                                      track_Callback)
         # image_sub = rospy.Subscriber("/camera/image_raw", Image,
         #                              track_Callback)
         rospy.spin()
+    if opt.img_source == 1:
+        cap = cv2.VideoCapture(0)
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if ret:
+                track_Callback(frame)
+    if opt.img_source == 2:
+        image_files = sorted(glob.glob(opt.local_img_path))
+        for image_file in image_files:
+            frame = cv2.imread(image_file)
+            track_Callback(frame)
+            rospy.sleep(1.0 / opt.img_frequency)
+        rospy.on_shutdown()  # BUG
