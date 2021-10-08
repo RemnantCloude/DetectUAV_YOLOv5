@@ -12,7 +12,6 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 import torch
-import math
 import os
 from os.path import realpath, dirname, join
 import glob
@@ -33,6 +32,8 @@ target = {
     "yolov5_xyxy": [],
     "diff_times": 0
 }
+
+position_data = {"is_detacted": False, "position": [], "image_shape": []}
 
 
 class OPT():
@@ -66,22 +67,22 @@ class OPT():
         self.diff_times = rospy.get_param("/yolov5_node/diff_times", default=5)
 
         self.camera_field_angle_pitch = rospy.get_param(
-            "/yolov5_node/camera_field_angle_pitch", default=60)  # 相机俯仰角
+            "/yolov5_node/camera_field_angle_pitch", default=180)  # 相机俯仰角
         self.camera_field_angle_yaw = rospy.get_param(
-            "/yolov5_node/camera_field_angle_yaw", default=80)  # 相机方位角
-        self.uav_size_x = rospy.get_param("/yolov5_node/uav_size_x",
-                                          default="0")
-        self.uav_size_y = rospy.get_param("/yolov5_node/uav_size_y",
-                                          default="0")
+            "/yolov5_node/camera_field_angle_yaw", default=180)  # 相机方位角
+        self.uav_size_x = rospy.get_param("/yolov5_node/uav_size_x", default=0)
+        self.uav_size_y = rospy.get_param("/yolov5_node/uav_size_y", default=0)
 
         self.img_source = rospy.get_param("/yolov5_node/img_source", default=0)
         self.local_img_path = rospy.get_param("/yolov5_node/local_img_path",
                                               default="")
-        self.img_frequency = rospy.get_param("/yolov5_node/img_frequency",
-                                             default=5)
+        self.read_img_interval = rospy.get_param(
+            "/yolov5_node/read_img_interval", default=0.2)
         self.debug = rospy.get_param("/yolov5_node/debug", default=False)
         self.view_img = rospy.get_param("/yolov5_node/view_img", default=False)
         self.save_img = rospy.get_param("/yolov5_node/save_img", default=False)
+        self.save_img_interval = rospy.get_param(
+            "/yolov5_node/save_img_interval", default=0.2)
         self.save_img_path = rospy.get_param("/yolov5_node/save_img_path",
                                              default="")
         self.track = rospy.get_param("/yolov5_node/track", default=False)
@@ -89,32 +90,34 @@ class OPT():
 
 class image():
     def __init__(self):
-        k1, k2, p1, p2, k3 = 0.0072, -0.0051, 0, 0, 0
-        # 相机坐标系到像素坐标系的转换矩阵
-        self.k = np.array([[341.7448, 0, 679.4348], [0, 340.6764, 485.0365],
-                           [0, 0, 1]])
+        # pointgray相机 # FIXME
         # 畸变系数
+        k1, k2, p1, p2, k3 = 0.0030, -0.0032, 0.0018, 0.0025, -0.0006
+        # 相机坐标系到像素坐标系的转换矩阵
+        self.k = np.array([[339.9101, -0.2465, 682.4559],
+                           [0, 339.0175, 487.1288], [0, 0, 1]])
         self.d = np.array([k1, k2, p1, p2, k3])
         self.save_img_lasttime = time_sync()
-        self.save_img_interval = 1  #second
+        self.save_img_interval = opt.save_img_interval
         self.save_img_cout = 0
         self.save_img_path = opt.save_img_path
         self.bridge = CvBridge()
 
-    def undistort(self, frame):
+    def __undistort(self, frame):
         h, w = frame.shape[:2]
         mapx, mapy = cv2.initUndistortRectifyMap(self.k, self.d, None, self.k,
                                                  (w, h), 5)
         return cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
 
-    def convert_img(self, frame):
+    def convertImg(self, frame):
         frame = self.bridge.imgmsg_to_cv2(frame, "bgr8")
-        img = cv2.flip(self.undistort(frame), -1)
+        img = cv2.flip(self.__undistort(frame), -1)
         return img
 
-    def save_img(self, frame):
-        if time_sync() - self.save_img_lasttime > self.save_img_interval:
-            self.save_img_lasttime = time_sync()
+    def saveImg(self, frame):
+        current_time = time_sync()
+        if current_time - self.save_img_lasttime > self.save_img_interval:
+            self.save_img_lasttime = current_time
             name = "{}.jpg".format(str(self.save_img_cout).rjust(6, "0"))
             if not os.path.exists(self.save_img_path):
                 os.mkdir(self.save_img_path)
@@ -143,37 +146,57 @@ def iou(box1, box2):
     return iou
 
 
-def position_publish(x, img_size, conf):
+def xyxy2xywh(x):
+    xy = np.array([int((x[0] + x[2]) / 2), int((x[1] + x[3]) / 2)])
+    wh = np.array([int(x[2] - x[0]), int(x[3] - x[1])])
+    return xy, wh
+
+
+def xywh2xyxy(xy, wh):
+    x1 = int(xy[0] - wh[0] / 2)
+    y1 = int(xy[1] - wh[1] / 2)
+    x2 = int(xy[0] + wh[0] / 2)
+    y2 = int(xy[1] + wh[1] / 2)
+    return [x1, y1, x2, y2]
+
+
+def positionPublish(position_data):
+    """
+    x = [x1,y1,x2,y2] - top-left, bottom-right
+    img_size = [w,h]
+    """
     global opt
     global uav_position_pub
 
+    xy, wh = xyxy2xywh(position_data["position"])
+    img_size = position_data["image_shape"]
+
     message = uav_position()
-    message.confidence = conf
-    message.img_h = img_size[0]
-    message.img_w = img_size[1]
-    # 根据无人机所占像素解算距离信息
-    message.distance_x = opt.uav_size_x / math.tan(opt.camera_field_angle_yaw *
-                                                   (x[2] - x[0]) /
-                                                   (2 * img_size[1]))
-    message.distance_y = opt.uav_size_y / math.tan(
-        opt.camera_field_angle_pitch * (x[3] - x[1]) / (2 * img_size[0]))
-    message.angle_pitch = opt.camera_field_angle_pitch / 2 - (
-        opt.camera_field_angle_pitch) * ((x[1] + x[3]) / 2 / img_size[0])
-    message.angle_yaw = opt.camera_field_angle_yaw / 2 - (
-        opt.camera_field_angle_yaw) * ((x[0] + x[2]) / 2 / img_size[1])
+    message.is_detected = position_data["is_detacted"]
+    if (message.is_detected == True):
+        # 根据无人机所占像素解算距离信息
+        message.distance_x = opt.uav_size_x * xy[0] / wh[0]
+        message.distance_y = opt.uav_size_y * xy[1] / wh[1]
+        # 鱼眼相机模型-等距投影
+        message.angle_yaw = opt.camera_field_angle_yaw / 2 - (
+            opt.camera_field_angle_yaw) * (xy[0] / img_size[0])
+        message.angle_pitch = opt.camera_field_angle_pitch / 2 - (
+            opt.camera_field_angle_pitch) * (xy[1] / img_size[1])
+
     uav_position_pub.publish(message)
 
 
 def detect(img):
     global opt
     global target
+    global position_data
 
     if opt.debug == True:
         t1 = time_sync()
 
     im0 = img.copy()
     img = letterbox(img, imgsz, stride)[0]
-    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
     img = np.ascontiguousarray(img)
     img = torch.from_numpy(img).to(opt.device)
     img = img.half() if opt.half else img.float()  # uint8 to fp16/32
@@ -209,12 +232,12 @@ def detect(img):
             conf = max_conf_item[-2]
             cls = max_conf_item[-1]
 
-            position_publish(xyxy.cpu().numpy().tolist(), im0.shape,
-                             conf.item())
-
             if opt.track == True:
                 target["yolov5_detect"] = True
                 target["yolov5_xyxy"] = xyxy.cpu().numpy()
+            else:  # 只检测，不跟踪
+                position_data["is_detacted"] = True
+                position_data["position"] = xyxy.cpu().numpy().tolist()
 
             if opt.view_img:  # Add bbox to image
                 c = int(cls)  # integer class
@@ -226,7 +249,7 @@ def detect(img):
                              line_thickness=opt.line_thickness)
         elif opt.track == True:
             target["yolov5_detect"] = False
-            target["diff_times"] = 0  # TODO
+            target["diff_times"] = 0
 
     # Stream results
     if opt.view_img:
@@ -241,18 +264,6 @@ def detect(img):
 
 
 def track(img):
-    def xyxy2xywh(x):
-        xy = np.array([int((x[0] + x[2]) / 2), int((x[1] + x[3]) / 2)])
-        wh = np.array([int(x[2] - x[0]), int(x[3] - x[1])])
-        return xy, wh
-
-    def xywh2xyxy(xy, wh):
-        x1 = int(xy[0] - wh[0] / 2)
-        y1 = int(xy[1] - wh[1] / 2)
-        x2 = int(xy[0] + wh[0] / 2)
-        y2 = int(xy[1] + wh[1] / 2)
-        return [x1, y1, x2, y2]
-
     global opt
     global state
     global siam_net
@@ -264,9 +275,7 @@ def track(img):
     im0 = img.copy()
     xyxy = [0, 0, 0, 0]
 
-    print("target", target)  # TEST
-
-    # first time
+    # initialize
     if target["siamRPN_init"] == False and target["yolov5_detect"] == True:
         target_pos, target_sz = xyxy2xywh(target["yolov5_xyxy"])
         state = SiamRPN_init(im0, target_pos, target_sz, siam_net)
@@ -277,15 +286,19 @@ def track(img):
         xyxy = xywh2xyxy(state["target_pos"], state["target_sz"])
         if opt.view_img == True:
             cv2.rectangle(im0, (xyxy[0], xyxy[1]), (xyxy[2], xyxy[3]),
-                          (0, 255, 255), 3)
-    # compare with yolov5
-    if target["siamRPN_init"] == True and target["yolov5_detect"] == True:
-        if iou(target["yolov5_xyxy"],
-               xyxy) < opt.siamRPN_conf_thres:  # track the wrong target
-            target["diff_times"] = target["diff_times"] + 1
-    else:
-        pass
-        # position_publish()
+                          (0, 255, 255), opt.line_thickness)
+        # compare with yolov5
+        if target["yolov5_detect"] == True:
+            if iou(target["yolov5_xyxy"],
+                   xyxy) < opt.siamRPN_conf_thres:  # track the wrong target
+                target["diff_times"] += 1
+            position_data["is_detacted"] = True
+            position_data["position"] = target[
+                "yolov5_xyxy"]  # use detect target
+        else:  # FIXME yolov5丢失目标后，可能完全跟踪到错误的目标
+            position_data["is_detacted"] = True
+            position_data["position"] = xyxy  # use track target
+
     # target loss, init net again
     if target["diff_times"] > opt.diff_times:
         target["diff_times"] = 0
@@ -302,20 +315,25 @@ def track(img):
         rospy.loginfo("Track time: %f", (t2 - t1))
 
 
-def track_Callback(image_file):
+def trackCallback(image_file):
     global my_image
     global opt
+    global position_data
 
     if opt.img_source == 0:
-        image_file = my_image.convert_img(image_file)
+        image_file = my_image.convertImg(image_file)
 
     if opt.save_img == True:
-        my_image.save_img(image_file)
+        my_image.saveImg(image_file)
 
+    position_data["is_detacted"] = False
+    position_data["image_shape"] = image_file.shape
     detect(image_file)
 
     if opt.track == True:
         track(image_file)
+
+    positionPublish(position_data)
 
 
 if __name__ == '__main__':
@@ -355,23 +373,23 @@ if __name__ == '__main__':
         siam_net.eval().cuda()
         state = dict()
 
-    # 0: external camera 1:local camera 2:local image dir
+    # 0: external camera 1: local camera 2: local image dir
     if opt.img_source == 0:
         image_sub = rospy.Subscriber("/camera/image_color", Image,
-                                     track_Callback)
+                                     trackCallback)
         # image_sub = rospy.Subscriber("/camera/image_raw", Image,
-        #                              track_Callback)
+        #                              trackCallback)
         rospy.spin()
     if opt.img_source == 1:
         cap = cv2.VideoCapture(0)
         while cap.isOpened():
             ret, frame = cap.read()
             if ret:
-                track_Callback(frame)
+                trackCallback(frame)
     if opt.img_source == 2:
         image_files = sorted(glob.glob(opt.local_img_path))
         for image_file in image_files:
             frame = cv2.imread(image_file)
-            track_Callback(frame)
-            rospy.sleep(1.0 / opt.img_frequency)
+            trackCallback(frame)
+            rospy.sleep(opt.read_img_interval)
         rospy.on_shutdown()  # BUG
