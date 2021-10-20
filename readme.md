@@ -7,11 +7,16 @@
     - [TODO](#todo)
     - [BUG](#bug)
   - [配置环境](#配置环境)
-    - [Xavier 设置功耗模式](#xavier-设置功耗模式)
     - [修改 Torch 库(如果 Torch < 1.7.0)](#修改-torch-库如果-torch--170)
   - [重新训练网络权重](#重新训练网络权重)
 
 # 项目介绍
+
+使用基于**YOLOv5**+**siamRPN**的神经网络模型识别**无人机**
+
+运行环境: Nvidia axvier + Ubuntu 18.04 + ROS1 melodic
+
+依赖: pytorch 1.2
 
 ## 项目进度
 
@@ -19,13 +24,9 @@
 
 - 只用一张图展示
 - 发送图片消息
-- 测试角度和距离解算
 
 ### TODO
 
-- 完成发送和订阅
-  - 测试从机状态能否获取图片
-  - topic无法publish
 - 消除torch的警告SourceChangeWarning
 
 ### BUG
@@ -34,33 +35,6 @@
 - 摄像头测试时无法关闭节点
 
 ## 配置环境
-
-### Xavier 设置功耗模式
-
-Jetson AGX Xavier 的功耗模式共有 8 种，分别编号为 0-7，依次为如下：
-
-0. MAXN
-1. MODE 10W
-2. MODE 15W
-3. MODE 30W ALL
-4. MODE 30W 6CORE
-5. MODE 30W 4CORE
-6. MODE 30W 2CORE
-7. MODE 15W DESKTOP
-   
-切换模式可使用命令如下， 如切换到MAXN模式为：
-
-```
-sudo nvpmodel -m 0
-```
-
-功耗模式的查询可使用命令如下：
-
-```
-sudo nvpmodel --query
-```
-
-如果是12V供电，需切换到**MODE 30W 4CORE**模式
 
 ### 修改 Torch 库(如果 Torch < 1.7.0)
 
