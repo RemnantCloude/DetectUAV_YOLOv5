@@ -17,17 +17,20 @@
 
 ### TEST
 
+- 只用一张图展示
+- 发送图片消息
+- 测试角度和距离解算
+
 ### TODO
 
-- 测试角度和距离解算
 - 完成发送和订阅
-  - 使用主从机
-- 摄像头位置不是在车辆正中间
+  - 测试从机状态能否获取图片
+  - topic无法publish
 - 消除torch的警告SourceChangeWarning
 
 ### BUG
 
-- 找不到nodelet包
+- pointgray_camera找不到nodelet包
 - 摄像头测试时无法关闭节点
 
 ## 配置环境

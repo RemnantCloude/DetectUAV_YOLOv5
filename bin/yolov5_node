@@ -24,7 +24,7 @@ from utils.augmentations import letterbox
 from siamRPN.net import SiamRPNvot
 from siamRPN.run_SiamRPN import SiamRPN_init, SiamRPN_track
 
-from yolov5.msg import uav_position
+from geometry_msgs.msg import Point
 
 target = {
     "siamRPN_init": False,
@@ -90,7 +90,7 @@ class OPT():
 
 class image():
     def __init__(self):
-        # pointgray相机 # FIXME
+        # 广角相机
         # 畸变系数
         k1, k2, p1, p2, k3 = 0.0030, -0.0032, 0.0018, 0.0025, -0.0006
         # 相机坐标系到像素坐标系的转换矩阵
@@ -111,7 +111,8 @@ class image():
 
     def convertImg(self, frame):
         frame = self.bridge.imgmsg_to_cv2(frame, "bgr8")
-        img = cv2.flip(self.__undistort(frame), -1)
+        # img = cv2.flip(self.__undistort(frame), -1)　# 广角相机
+        img = frame  # 普通相机
         return img
 
     def saveImg(self, frame):
@@ -129,6 +130,7 @@ class image():
 def iou(box1, box2):
     """
     box1, box2 = [x1,y1,x2,y2] - top-left, bottom-right
+    
     Returns: 
         float from 0 to 1
     """
@@ -168,25 +170,29 @@ def positionPublish(position_data):
     global opt
     global uav_position_pub
 
-    xy, wh = xyxy2xywh(position_data["position"])
-    img_size = position_data["image_shape"]
-
-    message = uav_position()
-    message.is_detected = position_data["is_detacted"]
-    if (message.is_detected == True):
-        # 根据无人机所占像素解算距离信息
-        message.distance_x = opt.uav_size_x * xy[0] / wh[0]
-        message.distance_y = opt.uav_size_y * xy[1] / wh[1]
-        # 鱼眼相机模型-等距投影
-        message.angle_yaw = opt.camera_field_angle_yaw / 2 - (
-            opt.camera_field_angle_yaw) * (xy[0] / img_size[0])
-        message.angle_pitch = opt.camera_field_angle_pitch / 2 - (
-            opt.camera_field_angle_pitch) * (xy[1] / img_size[1])
+    message = Point()
+    message.z = position_data["is_detacted"]
+    if (position_data["is_detacted"] == True):
+        xy, wh = xyxy2xywh(position_data["position"])
+        img_size = position_data["image_shape"]
+        # 根据无人机所占像素解算距离信息 left-x, up-y
+        message.x = opt.uav_size_x * (img_size[0] / 2 - xy[0]) / wh[0]
+        message.y = opt.uav_size_y * (img_size[1] / 2 - xy[1]) / wh[1]
+    # 广角相机模型-等距投影　# TODO
+    #message.angle_yaw = opt.camera_field_angle_yaw / 2 - (
+    #    opt.camera_field_angle_yaw) * ((float)(xy[0]) / img_size[0])
+    #message.angle_pitch = opt.camera_field_angle_pitch / 2 - (
+    #    opt.camera_field_angle_pitch) * ((float)(xy[1]) / img_size[1])
 
     uav_position_pub.publish(message)
 
 
-def detect(img):
+def detect(img, im0):
+    '''
+    img, im0 are source images
+    Returns:
+        img with detect rectangle
+    '''
     global opt
     global target
     global position_data
@@ -194,7 +200,6 @@ def detect(img):
     if opt.debug == True:
         t1 = time_sync()
 
-    im0 = img.copy()
     img = letterbox(img, imgsz, stride)[0]
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
     img = np.ascontiguousarray(img)
@@ -251,19 +256,14 @@ def detect(img):
             target["yolov5_detect"] = False
             target["diff_times"] = 0
 
-    # Stream results
-    if opt.view_img:
-        cv2.imshow("detect", im0)
-        key = cv2.waitKey(1)
-        if key & 0xFF == ord('q'):
-            rospy.on_shutdown()  # BUG
-
     if opt.debug == True:
         t2 = time_sync()
         rospy.loginfo("Detect time: %f", (t2 - t1))
 
+    return im0
 
-def track(img):
+
+def track(img, im0):
     global opt
     global state
     global siam_net
@@ -272,17 +272,16 @@ def track(img):
     if opt.debug == True:
         t1 = time_sync()
 
-    im0 = img.copy()
     xyxy = [0, 0, 0, 0]
 
     # initialize
     if target["siamRPN_init"] == False and target["yolov5_detect"] == True:
         target_pos, target_sz = xyxy2xywh(target["yolov5_xyxy"])
-        state = SiamRPN_init(im0, target_pos, target_sz, siam_net)
+        state = SiamRPN_init(img, target_pos, target_sz, siam_net)
         target["siamRPN_init"] = True
     # tracking
     if target["siamRPN_init"] == True:
-        state = SiamRPN_track(state, im0)
+        state = SiamRPN_track(state, img)
         xyxy = xywh2xyxy(state["target_pos"], state["target_sz"])
         if opt.view_img == True:
             cv2.rectangle(im0, (xyxy[0], xyxy[1]), (xyxy[2], xyxy[3]),
@@ -290,7 +289,7 @@ def track(img):
         # compare with yolov5
         if target["yolov5_detect"] == True:
             if iou(target["yolov5_xyxy"],
-                   xyxy) < opt.siamRPN_conf_thres:  # track the wrong target
+                   xyxy) < opt.siamRPN_conf_thres:  # track wrong target
                 target["diff_times"] += 1
             position_data["is_detacted"] = True
             position_data["position"] = target[
@@ -304,21 +303,19 @@ def track(img):
         target["diff_times"] = 0
         target["siamRPN_init"] = False
 
-    if opt.view_img == True:
-        cv2.imshow("track", im0)
-        key = cv2.waitKey(1)
-        if key & 0xFF == ord('q'):
-            rospy.on_shutdown()  # BUG
-
     if opt.debug == True:
         t2 = time_sync()
         rospy.loginfo("Track time: %f", (t2 - t1))
 
+    return im0
 
-def trackCallback(image_file):
+
+def imageCallback(image_file):
     global my_image
     global opt
     global position_data
+
+    im0 = image_file.copy()
 
     if opt.img_source == 0:
         image_file = my_image.convertImg(image_file)
@@ -328,12 +325,23 @@ def trackCallback(image_file):
 
     position_data["is_detacted"] = False
     position_data["image_shape"] = image_file.shape
-    detect(image_file)
+    im0 = detect(image_file, im0)
 
     if opt.track == True:
-        track(image_file)
+        im0 = track(image_file, im0)
+
+    if opt.view_img == True:
+        cv2.imshow("image", im0)
+        key = cv2.waitKey(1)
+        if key & 0xFF == ord('q'):
+            rospy.on_shutdown()  # BUG
 
     positionPublish(position_data)
+
+    # publish the image with detect rectangle
+    bridge = CvBridge()
+    msg = bridge.cv2_to_imgmsg(im0, "bgr8")
+    image_pub.publish(msg)
 
 
 if __name__ == '__main__':
@@ -342,7 +350,7 @@ if __name__ == '__main__':
 
     rospy.init_node('yolov5_node', anonymous=False)
     uav_position_pub = rospy.Publisher("/yolov5/uav_position",
-                                       uav_position,
+                                       Point,
                                        queue_size=1)
 
     ## load yolov5 model
@@ -373,23 +381,25 @@ if __name__ == '__main__':
         siam_net.eval().cuda()
         state = dict()
 
+    image_pub = rospy.Publisher("/yolov5/image_color", Image)
+
     # 0: external camera 1: local camera 2: local image dir
     if opt.img_source == 0:
         image_sub = rospy.Subscriber("/camera/image_color", Image,
-                                     trackCallback)
-        # image_sub = rospy.Subscriber("/camera/image_raw", Image,
-        #                              trackCallback)
+                                     imageCallback)
         rospy.spin()
+
     if opt.img_source == 1:
         cap = cv2.VideoCapture(0)
         while cap.isOpened():
             ret, frame = cap.read()
             if ret:
-                trackCallback(frame)
+                imageCallback(frame)
+
     if opt.img_source == 2:
         image_files = sorted(glob.glob(opt.local_img_path))
         for image_file in image_files:
             frame = cv2.imread(image_file)
-            trackCallback(frame)
+            imageCallback(frame)
             rospy.sleep(opt.read_img_interval)
         rospy.on_shutdown()  # BUG
